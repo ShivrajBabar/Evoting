@@ -1,0 +1,170 @@
+
+PRAGMA foreign_keys=OFF;
+BEGIN TRANSACTION;
+
+-- Users Table
+CREATE TABLE users (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT UNIQUE NOT NULL,
+  password TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('superadmin', 'admin', 'voter')) DEFAULT 'voter',
+  status TEXT NOT NULL CHECK (status IN ('Active', 'Inactive', 'Pending')) DEFAULT 'Pending',
+  photoUrl TEXT,
+  voter_id TEXT UNIQUE,
+  phone TEXT,
+  constituency_id INTEGER,
+  booth_id INTEGER,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Insert sample users
+INSERT INTO users VALUES('1','Super Admin','superadmin@example.com','$2a$10$F3igo1zKH.d5O6v8PX69/.fEFJZPhkDgdmP9NJIoQjJ9DsNPPMUmu','superadmin','Active','/placeholder.svg',NULL,NULL,NULL,NULL,'2023-01-01 00:00:00','2023-01-01 00:00:00');
+INSERT INTO users VALUES('2','Admin User','admin@example.com','$2a$10$F3igo1zKH.d5O6v8PX69/.fEFJZPhkDgdmP9NJIoQjJ9DsNPPMUmu','admin','Active','/placeholder.svg',NULL,NULL,1,NULL,'2023-01-01 00:00:00','2023-01-01 00:00:00');
+INSERT INTO users VALUES('3','Voter User','voter@example.com','$2a$10$YgU9QVXq52iRjO1bIGfGdOoFVZbPA.enDkKOBXHxuwQk3YJplI27O','voter','Active','/placeholder.svg','VOT123456','9876543210',1,1,'2023-01-01 00:00:00','2023-01-01 00:00:00');
+
+-- Constituencies Table
+CREATE TABLE constituencies (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  state TEXT NOT NULL,
+  district TEXT NOT NULL,
+  total_voters INTEGER DEFAULT 0,
+  status TEXT CHECK (status IN ('Active', 'Inactive')) DEFAULT 'Active',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Insert sample constituencies
+INSERT INTO constituencies VALUES(1,'Mumbai North','Maharashtra','Mumbai',10000,'Active','2023-01-01 00:00:00','2023-01-01 00:00:00');
+INSERT INTO constituencies VALUES(2,'Mumbai South','Maharashtra','Mumbai',12000,'Active','2023-01-01 00:00:00','2023-01-01 00:00:00');
+INSERT INTO constituencies VALUES(3,'Pune','Maharashtra','Pune',15000,'Active','2023-01-01 00:00:00','2023-01-01 00:00:00');
+
+-- Booths Table
+CREATE TABLE booths (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  address TEXT,
+  constituency_id INTEGER NOT NULL,
+  officer_id TEXT,
+  status TEXT CHECK (status IN ('Active', 'Inactive')) DEFAULT 'Active',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (constituency_id) REFERENCES constituencies(id) ON DELETE CASCADE,
+  FOREIGN KEY (officer_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+-- Insert sample booths
+INSERT INTO booths VALUES(1,'Booth 1','123 Main St, Mumbai',1,'2','Active','2023-01-01 00:00:00','2023-01-01 00:00:00');
+INSERT INTO booths VALUES(2,'Booth 2','456 Oak St, Mumbai',1,NULL,'Active','2023-01-01 00:00:00','2023-01-01 00:00:00');
+INSERT INTO booths VALUES(3,'Booth 3','789 Pine St, Mumbai',2,NULL,'Active','2023-01-01 00:00:00','2023-01-01 00:00:00');
+
+-- Elections Table
+CREATE TABLE elections (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL,
+  start_date TEXT NOT NULL,
+  end_date TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('Upcoming', 'Active', 'Completed', 'Cancelled')) DEFAULT 'Upcoming',
+  description TEXT,
+  constituency_id INTEGER,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (constituency_id) REFERENCES constituencies(id) ON DELETE SET NULL
+);
+
+-- Insert sample elections
+INSERT INTO elections VALUES(1,'Lok Sabha Elections 2023','Lok Sabha','2023-05-01','2023-05-15','Completed','General Elections for Lok Sabha 2023',NULL,'2023-01-01 00:00:00','2023-01-01 00:00:00');
+INSERT INTO elections VALUES(2,'Maharashtra Assembly Elections 2023','Assembly','2023-06-01','2023-06-15','Completed','State Assembly Elections',NULL,'2023-01-01 00:00:00','2023-01-01 00:00:00');
+
+-- Candidates Table
+CREATE TABLE candidates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  party TEXT NOT NULL,
+  symbol_url TEXT,
+  photo_url TEXT,
+  bio TEXT,
+  election_id INTEGER NOT NULL,
+  constituency_id INTEGER,
+  status TEXT NOT NULL CHECK (status IN ('Active', 'Inactive', 'Pending', 'Rejected')) DEFAULT 'Pending',
+  document_url TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (election_id) REFERENCES elections(id) ON DELETE CASCADE,
+  FOREIGN KEY (constituency_id) REFERENCES constituencies(id) ON DELETE SET NULL
+);
+
+-- Insert sample candidates
+INSERT INTO candidates VALUES(1,'Candidate 1','Party A',NULL,NULL,'Experienced politician',1,1,'Active',NULL,'2023-01-01 00:00:00','2023-01-01 00:00:00');
+INSERT INTO candidates VALUES(2,'Candidate 2','Party B',NULL,NULL,'Business background',1,1,'Active',NULL,'2023-01-01 00:00:00','2023-01-01 00:00:00');
+INSERT INTO candidates VALUES(3,'Candidate 3','Party C',NULL,NULL,'Social activist',1,1,'Active',NULL,'2023-01-01 00:00:00','2023-01-01 00:00:00');
+
+-- Votes Table
+CREATE TABLE votes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  election_id INTEGER NOT NULL,
+  voter_id TEXT NOT NULL,
+  candidate_id INTEGER NOT NULL,
+  booth_id INTEGER NOT NULL,
+  voted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (election_id) REFERENCES elections(id) ON DELETE CASCADE,
+  FOREIGN KEY (voter_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE,
+  FOREIGN KEY (booth_id) REFERENCES booths(id) ON DELETE CASCADE,
+  UNIQUE (election_id, voter_id)
+);
+
+-- Insert sample votes
+INSERT INTO votes VALUES(1,1,'3',1,1,'2023-05-10 10:00:00');
+
+-- Results Table
+CREATE TABLE results (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  election_id INTEGER NOT NULL,
+  constituency_id INTEGER,
+  total_votes INTEGER NOT NULL DEFAULT 0,
+  voter_turnout REAL DEFAULT 0,
+  completed_date TEXT,
+  published BOOLEAN DEFAULT 0,
+  published_date TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (election_id) REFERENCES elections(id) ON DELETE CASCADE,
+  FOREIGN KEY (constituency_id) REFERENCES constituencies(id) ON DELETE SET NULL
+);
+
+-- Insert sample results
+INSERT INTO results VALUES(1,1,1,1500,75.5,'2023-05-15 18:00:00',1,'2023-05-16 12:00:00','2023-05-16 00:00:00','2023-05-16 00:00:00');
+INSERT INTO results VALUES(2,2,1,1200,65.0,'2023-06-15 18:00:00',1,'2023-06-16 12:00:00','2023-06-16 00:00:00','2023-06-16 00:00:00');
+
+-- Candidate Results Table
+CREATE TABLE candidate_results (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  result_id INTEGER NOT NULL,
+  candidate_id INTEGER NOT NULL,
+  votes INTEGER NOT NULL DEFAULT 0,
+  percentage REAL DEFAULT 0,
+  FOREIGN KEY (result_id) REFERENCES results(id) ON DELETE CASCADE,
+  FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE
+);
+
+-- Insert sample candidate results
+INSERT INTO candidate_results VALUES(1,1,1,750,50.0);
+INSERT INTO candidate_results VALUES(2,1,2,500,33.33);
+INSERT INTO candidate_results VALUES(3,1,3,250,16.67);
+
+-- Create indices for better performance
+CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_users_constituency ON users(constituency_id);
+CREATE INDEX idx_booths_constituency ON booths(constituency_id);
+CREATE INDEX idx_elections_status ON elections(status);
+CREATE INDEX idx_candidates_election ON candidates(election_id);
+CREATE INDEX idx_votes_election ON votes(election_id);
+CREATE INDEX idx_votes_voter ON votes(voter_id);
+CREATE INDEX idx_results_election ON results(election_id);
+CREATE INDEX idx_results_published ON results(published);
+
+COMMIT;

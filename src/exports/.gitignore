@@ -1,0 +1,7 @@
+
+# Ignore database files
+*.sqlite
+*.sql
+
+# Keep directory structure
+!.gitignore
