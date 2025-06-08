@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import { Button } from '@/components/ui/button';
@@ -19,9 +18,9 @@ import { useToast } from '@/components/ui/use-toast';
 import { Edit, MoreVertical, PlusCircle, Search, Trash2, UserPlus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-// Define the admin interface to fix TypeScript errors
 interface Admin {
   id: string;
+  user_id: string;
   name: string;
   email: string;
   phone?: string;
@@ -34,99 +33,73 @@ interface Admin {
 const Admins = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  
+
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [filteredAdmins, setFilteredAdmins] = useState<Admin[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
-  
+  const [error, setError] = useState<string | null>(null);
+
   const [selectedAdmin, setSelectedAdmin] = useState<Admin | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  
+
   // Sort states
   const [sortField, setSortField] = useState<keyof Admin>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  
-  // Fetch admins data
-  useEffect(() => {
-    const fetchAdmins = async () => {
-      try {
-        // In a real app, you'd fetch from an API
-        // For now, let's use mock data
-        const mockAdmins: Admin[] = [
-          {
-            id: "1",
-            name: "John Smith",
-            email: "john@example.com",
-            phone: "9876543210",
-            status: "active",
-            constituency: "Mumbai North",
-            state: "Maharashtra",
-            district: "Mumbai"
-          },
-          {
-            id: "2",
-            name: "Jane Doe",
-            email: "jane@example.com",
-            phone: "8765432109",
-            status: "inactive",
-            constituency: "Mumbai South",
-            state: "Maharashtra",
-            district: "Mumbai"
-          },
-          {
-            id: "3",
-            name: "Alex Johnson",
-            email: "alex@example.com",
-            phone: "7654321098",
-            status: "active",
-            constituency: "Pune",
-            state: "Maharashtra",
-            district: "Pune"
-          }
-        ];
-        
-        setAdmins(mockAdmins);
-        setFilteredAdmins(mockAdmins);
-        setLoading(false);
-      } catch (error) {
-        console.error("Failed to fetch admins:", error);
-        setLoading(false);
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to load admin data",
-        });
+
+  // Fetch admins data from API
+  const fetchAdmins = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch('http://localhost:3000/api/admins');
+      if (!response.ok) {
+        throw new Error('Failed to fetch admins');
       }
-    };
-    
+      const data = await response.json();
+      setAdmins(data);
+      setFilteredAdmins(data);
+    } catch (err) {
+      console.error("Failed to fetch admins:", err);
+      setError(err.message);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to load admin data",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchAdmins();
   }, [toast]);
-  
+
   // Handle search
   useEffect(() => {
     const filtered = admins.filter(admin =>
       admin.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       admin.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      admin.constituency.toLowerCase().includes(searchQuery.toLowerCase())
+      (admin.constituency && admin.constituency.toLowerCase().includes(searchQuery.toLowerCase()))
     );
-    
+
     const sorted = [...filtered].sort((a, b) => {
-      const valueA = a[sortField];
-      const valueB = b[sortField];
-      
+      const valueA = a[sortField] || '';
+      const valueB = b[sortField] || '';
+
       if (valueA === valueB) return 0;
-      
+
       if (sortDirection === 'asc') {
         return valueA < valueB ? -1 : 1;
       } else {
         return valueA > valueB ? -1 : 1;
       }
     });
-    
+
     setFilteredAdmins(sorted);
   }, [searchQuery, admins, sortField, sortDirection]);
-  
+
   // Handle sort toggle
   const handleSortToggle = (field: keyof Admin) => {
     if (sortField === field) {
@@ -136,40 +109,81 @@ const Admins = () => {
       setSortDirection('asc');
     }
   };
-  
+
   // Handle admin status toggle
-  const handleStatusToggle = (admin: Admin) => {
-    const updatedAdmins = admins.map(a => {
-      if (a.id === admin.id) {
-        const newStatus = a.status === 'active' ? 'inactive' : 'active';
-        return { ...a, status: newStatus };
+  const handleStatusToggle = async (admin: Admin) => {
+    try {
+      const newStatus = admin.status.toLowerCase() === 'active' ? 'inactive' : 'active';
+
+
+      const response = await fetch(`http://localhost:3000/api/users/${admin.user_id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update status');
       }
-      return a;
-    });
-    
-    setAdmins(updatedAdmins);
-    
-    toast({
-      title: "Status Updated",
-      description: `${admin.name}'s status has been updated.`,
-    });
+
+      // Update local state
+      const updatedAdmins = admins.map(a => {
+        if (a.id === admin.id) {
+          return { ...a, status: newStatus };
+        }
+        return a;
+      });
+
+      setAdmins(updatedAdmins);
+
+      toast({
+        title: "Status Updated",
+        description: `${admin.name}'s status has been updated to ${newStatus}.`,
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    }
   };
-  
+
   // Handle delete
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!selectedAdmin) return;
-    
-    const updatedAdmins = admins.filter(admin => admin.id !== selectedAdmin.id);
-    setAdmins(updatedAdmins);
-    setIsDeleteDialogOpen(false);
-    setSelectedAdmin(null);
-    
-    toast({
-      title: "Admin Deleted",
-      description: `${selectedAdmin.name} has been removed from the system.`,
-    });
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/admins/${selectedAdmin.id}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete admin');
+      }
+
+      // Update local state
+      const updatedAdmins = admins.filter(admin => admin.id !== selectedAdmin.id);
+      setAdmins(updatedAdmins);
+
+      toast({
+        title: "Admin Deleted",
+        description: `${selectedAdmin.name} has been removed from the system.`,
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    } finally {
+      setIsDeleteDialogOpen(false);
+      setSelectedAdmin(null);
+    }
   };
-  
+
   return (
     <Layout>
       <div className="container mx-auto p-4">
@@ -180,7 +194,7 @@ const Admins = () => {
             Register New Admin
           </Button>
         </div>
-        
+
         <Card>
           <CardHeader>
             <CardTitle>Admins</CardTitle>
@@ -201,6 +215,10 @@ const Admins = () => {
             {loading ? (
               <div className="flex justify-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : error ? (
+              <div className="flex justify-center py-8 text-destructive">
+                {error}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -236,11 +254,12 @@ const Admins = () => {
                           <TableCell>{admin.name}</TableCell>
                           <TableCell>{admin.email}</TableCell>
                           <TableCell>{admin.phone || 'N/A'}</TableCell>
-                          <TableCell>{admin.constituency}</TableCell>
+                          <TableCell>{admin.constituency?.trim() ? admin.constituency : 'N/A'}</TableCell>
                           <TableCell>
-                            <Badge variant={admin.status === 'active' ? 'default' : 'outline'}>
-                              {admin.status === 'active' ? 'Active' : 'Inactive'}
+                            <Badge variant={admin.status?.toLowerCase() === 'active' ? 'default' : 'outline'}>
+                              {admin.status?.toLowerCase() === 'active' ? 'Active' : 'Inactive'}
                             </Badge>
+
                           </TableCell>
                           <TableCell className="text-right">
                             <DropdownMenu>
@@ -259,7 +278,7 @@ const Admins = () => {
                                   {admin.status === 'active' ? 'Deactivate' : 'Activate'}
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem 
+                                <DropdownMenuItem
                                   className="text-destructive focus:text-destructive"
                                   onClick={() => {
                                     setSelectedAdmin(admin);
@@ -287,7 +306,7 @@ const Admins = () => {
           </CardFooter>
         </Card>
       </div>
-      
+
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>

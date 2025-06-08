@@ -27,10 +27,18 @@ const formSchema = z.object({
   phone: z.string().min(10, {
     message: "Phone number must be at least 10 digits.",
   }),
-  dob: z.string(),
-  state: z.string(),
-  district: z.string(),
-  vidhansabha: z.string(),
+  dob: z.string().refine(val => val, {
+    message: "Date of birth is required",
+  }),
+  state: z.string().min(1, {
+    message: "State is required",
+  }),
+  district: z.string().min(1, {
+    message: "District is required",
+  }),
+  vidhansabha: z.string().min(1, {
+    message: "Vidhan Sabha constituency is required",
+  }),
   password: z.string().min(8, {
     message: "Password must be at least 8 characters.",
   }),
@@ -42,11 +50,12 @@ const formSchema = z.object({
 
 const RegisterAdmin = () => {
   const { toast } = useToast();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // States for dependent dropdowns
-  const [states, setStates] = useState([]);
-  const [districts, setDistricts] = useState([]);
-  const [vidhansabhas, setVidhansabhas] = useState([]);
+  const [states, setStates] = useState<{ value: string, label: string }[]>([]);
+  const [districts, setDistricts] = useState<{ value: string, label: string }[]>([]);
+  const [vidhansabhas, setVidhansabhas] = useState<{ value: string, label: string }[]>([]);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -63,25 +72,30 @@ const RegisterAdmin = () => {
     },
   });
 
-  // Add these fetch functions
+  // Fetch states when component mounts
   const fetchStates = async () => {
     try {
       const response = await fetch('http://localhost:3000/api/states');
       const data = await response.json();
-      setStates(data.map(state => ({
+      setStates(data.map((state: any) => ({
         value: state.id.toString(),
         label: state.name
       })));
     } catch (error) {
       console.error('Error fetching states:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch states",
+        variant: "destructive"
+      });
     }
   };
 
-  const handleStateChange = async (stateId) => {
+  const handleStateChange = async (stateId: string) => {
     try {
       const response = await fetch(`http://localhost:3000/api/districts?state_id=${stateId}`);
       const data = await response.json();
-      setDistricts(data.map(district => ({
+      setDistricts(data.map((district: any) => ({
         value: district.id.toString(),
         label: district.name
       })));
@@ -91,71 +105,94 @@ const RegisterAdmin = () => {
       form.setValue('vidhansabha', '');
     } catch (error) {
       console.error('Error fetching districts:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch districts",
+        variant: "destructive"
+      });
     }
   };
 
-  const handleDistrictChange = async (districtId) => {
+  const handleDistrictChange = async (districtId: string) => {
     try {
-      const response = await fetch(`http://localhost:3000/api/constituencies?district_id=${districtId}&type=vidhansabha`);
+      const response = await fetch(
+        `http://localhost:3000/api/constituencies?district_id=${districtId}&type=vidhansabha`
+      );
       const data = await response.json();
-      setVidhansabhas(data.map(constituency => ({
+      setVidhansabhas(data.map((constituency: any) => ({
         value: constituency.id.toString(),
         label: constituency.name
       })));
       form.setValue('vidhansabha', '');
     } catch (error) {
       console.error('Error fetching vidhansabhas:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch Vidhan Sabha constituencies",
+        variant: "destructive"
+      });
     }
   };
 
-  // Add useEffect to fetch states when component mounts
   useEffect(() => {
     fetchStates();
   }, []);
 
-  async function onSubmit(values: z.infer<typeof formSchema>, event) {
+  // Update the onSubmit function in your RegisterAdmin.tsx
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    setIsSubmitting(true);
     try {
       const formData = new FormData();
       formData.append('name', values.name);
       formData.append('email', values.email);
       formData.append('phone', values.phone);
+
+      // Ensure dob is properly formatted and included
+      if (values.dob) {
+        // Convert date to YYYY-MM-DD format if needed
+        const dobDate = new Date(values.dob);
+        const formattedDob = dobDate.toISOString().split('T')[0];
+        formData.append('dob', formattedDob);
+      }
+
       formData.append('password', values.password);
       formData.append('state_id', values.state);
       formData.append('district_id', values.district);
       formData.append('constituency_id', values.vidhansabha);
-  
+
       // Append photo if present
-      const fileInput = event.target.querySelector('input[type="file"]');
-      if (fileInput?.files[0]) {
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      if (fileInput?.files?.[0]) {
         formData.append('photo', fileInput.files[0]);
       }
-  
+
       const response = await fetch('http://localhost:3000/api/admins', {
         method: 'POST',
         body: formData,
       });
-  
+
       const result = await response.json();
-  
+
       if (!response.ok) {
         throw new Error(result.error || 'Failed to register admin');
       }
-  
+
       toast({
-        title: "Admin Registered",
-        description: `${values.name} has been registered successfully as an Admin for constituency ID ${values.vidhansabha}.`,
+        title: "Success",
+        description: "Admin registered successfully!",
       });
-  
+
       form.reset();
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Registration Failed",
-        description: error.message,
+        description: error.message || "An error occurred during registration",
         variant: "destructive"
       });
+    } finally {
+      setIsSubmitting(false);
     }
   }
-  
 
   return (
     <Layout>
@@ -172,7 +209,7 @@ const RegisterAdmin = () => {
           </CardHeader>
           <CardContent>
             <Form {...form}>
-              <form onSubmit={(event) => form.handleSubmit(onSubmit)(event)} className="space-y-6">
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <FormField
                     control={form.control}
@@ -353,10 +390,12 @@ const RegisterAdmin = () => {
 
                 <div>
                   <FormLabel>Admin Photo</FormLabel>
-                  <Input type="file" name="photo" accept='image/*' />
+                  <Input type="file" name="photo" accept="image/*" />
                 </div>
 
-                <Button type="submit">Register Admin</Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? "Registering..." : "Register Admin"}
+                </Button>
               </form>
             </Form>
           </CardContent>

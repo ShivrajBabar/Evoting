@@ -52,6 +52,9 @@ const formSchema = z.object({
 const RegisterVoter = () => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -83,8 +86,11 @@ const RegisterVoter = () => {
   const [wards, setWards] = useState<Option[]>([]);
   const [booths, setBooths] = useState<Option[]>([]);
 
-
-  // Placeholder handlers
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setPhotoFile(e.target.files[0]);
+    }
+  };
 
   const handleLoksabhaChange = async (stateId: string) => {
     try {
@@ -94,28 +100,12 @@ const RegisterVoter = () => {
         value: c.id.toString(),
         label: c.name,
       }));
-      setLoksabhas(options); // ✅ Correct
+      setLoksabhas(options);
       form.setValue("loksabhaWard", "");
     } catch (error) {
       console.error("Error fetching loksabhas:", error);
     }
   };
-
-
-  // const handleLoksabhaChange = async (stateId: string) => {
-  //   try {
-  //     const res = await fetch(`http://localhost:3000/api/constituencies?state_id=${stateId}&type=loksabha`);
-  //     const data = await res.json();
-  //     const options = data.map((c) => ({
-  //       value: c.id.toString(),
-  //       label: c.name,
-  //     }));
-  //     setLoksabhas(options);
-  //     form.setValue("loksabhaWard", "");
-  //   } catch (error) {
-  //     console.error("Error fetching loksabhas:", error);
-  //   }
-  // };
 
   const handleLocalbodyChange = async (localBodyId: string) => {
     try {
@@ -134,8 +124,6 @@ const RegisterVoter = () => {
     }
   };
 
-
-
   const handleWardChange = async (wardId: string) => {
     try {
       const res = await fetch(`http://localhost:3000/api/booths?ward_id=${wardId}`);
@@ -151,8 +139,6 @@ const RegisterVoter = () => {
       console.error("Error fetching booths:", error);
     }
   };
-
-
 
   useEffect(() => {
     fetchStates();
@@ -182,42 +168,20 @@ const RegisterVoter = () => {
       setVidhansabhas([]);
       form.setValue("district", "");
       form.setValue("vidhansabhaWard", "");
-
-      // Add this line to fetch loksabha options
       await handleLoksabhaChange(stateId);
-
     } catch (error) {
       console.error("Error fetching districts:", error);
     }
   };
 
-
-  // const handleStateChange = async (stateId: string) => {
-  //   try {
-  //     const res = await fetch(`http://localhost:3000/api/districts?state_id=${stateId}`);
-  //     const data = await res.json();
-  //     setDistricts(data.map((district) => ({
-  //       value: district.id.toString(),
-  //       label: district.name
-  //     })));
-  //     setVidhansabhas([]);
-  //     form.setValue("district", "");
-  //     form.setValue("vidhansabhaWard", "");
-  //   } catch (error) {
-  //     console.error("Error fetching districts:", error);
-  //   }
-  // };
-
   const handleVidhansabhaChange = async (vidhansabhaId: string, districtId: string) => {
     try {
       const res = await fetch(`http://localhost:3000/api/local-bodies?district_id=${districtId}`);
       const data = await res.json();
-
       setLocalbodies(data.map((lb) => ({
         value: lb.id.toString(),
         label: lb.name
       })));
-
       form.setValue("vidhansabhaWard", vidhansabhaId);
       form.setValue("localbody", "");
       setWards([]);
@@ -226,8 +190,6 @@ const RegisterVoter = () => {
       console.error("Error fetching local bodies:", error);
     }
   };
-
-
 
   const handleDistrictChange = async (districtId: string) => {
     try {
@@ -243,15 +205,58 @@ const RegisterVoter = () => {
     }
   };
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    console.log(values);
-    toast({
-      title: "Voter Registered",
-      description: `${values.name} has been registered successfully as a voter.`,
-    });
-    form.reset();
-  }
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    setIsSubmitting(true);
+    try {
+      const formData = new FormData();
 
+      // Append all form values
+      Object.entries(values).forEach(([key, value]) => {
+        if (value) formData.append(key, value);
+      });
+
+      // Append photo file if exists
+      if (photoFile) {
+        formData.append('photo', photoFile);
+      }
+
+      const response = await fetch('http://localhost:3000/api/voters', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const contentType = response.headers.get("content-type");
+
+        if (contentType && contentType.includes("application/json")) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to register voter');
+        } else {
+          const errorText = await response.text();
+          throw new Error("Non-JSON error: " + errorText);
+        }
+      }
+
+
+      toast({
+        title: "Voter Registered",
+        description: `${values.name} has been registered successfully as a voter.`,
+        variant: "default",
+      });
+
+      form.reset();
+      setPhotoFile(null);
+    } catch (error) {
+      console.error("Registration error:", error);
+      toast({
+        title: "Registration Failed",
+        description: error instanceof Error ? error.message : 'An unexpected error occurred',
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   return (
     <Layout>
@@ -403,7 +408,6 @@ const RegisterVoter = () => {
                     )}
                   />
 
-
                   <FormField
                     control={form.control}
                     name="loksabhaWard"
@@ -464,8 +468,6 @@ const RegisterVoter = () => {
                     )}
                   />
 
-
-
                   <FormField
                     control={form.control}
                     name="localbody"
@@ -488,7 +490,6 @@ const RegisterVoter = () => {
                                 {localbody.label}
                               </SelectItem>
                             ))}
-
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -518,7 +519,6 @@ const RegisterVoter = () => {
                                 {ward.label}
                               </SelectItem>
                             ))}
-
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -548,7 +548,6 @@ const RegisterVoter = () => {
                                 {booth.label}
                               </SelectItem>
                             ))}
-
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -587,11 +586,18 @@ const RegisterVoter = () => {
 
                 <div>
                   <FormLabel>Voter Photo</FormLabel>
-                  <Input type="file" className="mt-1" />
+                  <Input
+                    type="file"
+                    className="mt-1"
+                    onChange={handlePhotoChange}
+                    accept="image/*"
+                  />
                 </div>
 
                 <div className="flex justify-end">
-                  <Button type="submit">Register Voter</Button>
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? "Registering..." : "Register Voter"}
+                  </Button>
                 </div>
               </form>
             </Form>

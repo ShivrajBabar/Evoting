@@ -6,7 +6,6 @@ const bcrypt = require('bcryptjs');
 const bodyParser = require('body-parser');
 const mysql = require('mysql2/promise');
 const fs = require('fs');
-const upload = multer({ dest: 'uploads/' });
 
 // Create Express app
 const app = express();
@@ -23,25 +22,11 @@ const pool = mysql.createPool({
   queueLimit: 0
 });
 
-// Middleware
-app.use(cors());
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use('/uploads/photos', express.static('uploads/photos'));
-
-// Ensure uploads folder exists
 const photoDir = 'uploads/photos';
 if (!fs.existsSync(photoDir)) {
   fs.mkdirSync(photoDir, { recursive: true });
 }
 
-// Utility query function
-const query = async ({ query, values = [] }) => {
-  const [results] = await pool.execute(query, values);
-  return results;
-};
-
-// Configure Multer for image upload
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, photoDir);
@@ -53,6 +38,8 @@ const storage = multer.diskStorage({
   }
 });
 
+
+
 const fileFilter = (req, file, cb) => {
   if (file.mimetype.startsWith('image/')) {
     cb(null, true);
@@ -60,6 +47,27 @@ const fileFilter = (req, file, cb) => {
     cb(new Error('Only image files are allowed'), false);
   }
 };
+
+
+const upload = multer({ storage, fileFilter });
+// Middleware
+app.use(cors({
+  origin: 'http://localhost:3001', // allow frontend only
+  credentials: true
+}));
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use('/uploads/photos', express.static('uploads/photos'));
+
+
+
+// Utility query function
+const query = async ({ query, values = [] }) => {
+  const [results] = await pool.execute(query, values);
+  return results;
+};
+
+
 
 // const upload = multer({ storage, fileFilter });
 
@@ -206,47 +214,405 @@ app.post('/api/admins', upload.single('photo'), async (req, res) => {
     console.log("🖼 Uploaded file:", req.file);
 
     // Destructure form data from req.body and req.file (for photo)
-    const { name, email, phone, password, state_id, district_id, constituency_id } = req.body;
+    const {
+      name,
+      email,
+      phone,
+      password,
+      dob,
+      state_id,
+      district_id,
+      constituency_id
+    } = req.body;
+
+    console.log('Received DOB:', dob);
+
     const photo_name = req.file ? req.file.filename : null;
 
+    // Validate required fields
     if (!name || !email || !phone || !password || !state_id || !district_id || !constituency_id) {
       return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Check if email already exists
+    const [existingUser] = await pool.query(
+      'SELECT id FROM users WHERE email = ?',
+      [email]
+    );
+
+    if (existingUser.length > 0) {
+      return res.status(400).json({ error: 'Email already exists' });
     }
 
     // Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    console.log("🔐 Hashed password:", hashedPassword);
-    console.log("📝 Saving user...");
+    // Start a transaction
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
 
-    // Insert user into the database
-    const result = await pool.query(`
-      INSERT INTO users (role_id, name, email, phone, password, photo_name, status)
-      VALUES (?, ?, ?, ?, ?, ?, 'active')
-    `, [2, name, email, phone, hashedPassword, photo_name]);
+    try {
+      // Insert user into the users table
+      const [userResult] = await connection.query(
+        `INSERT INTO users 
+        (role_id, name, email, phone, dob, password, photo_name, status) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'active')`,
+        [2, name, email, phone, dob || null, hashedPassword, photo_name]
+      );
 
-    console.log("✅ User insert result:", result);
+      const userId = userResult.insertId;
 
-    const userId = result[0]?.insertId || result.insertId;
+      // Insert admin into the admins table
+      await connection.query(
+        `INSERT INTO admins 
+        (user_id, state_id, district_id, constituency_id) 
+        VALUES (?, ?, ?, ?)`,
+        [userId, state_id, district_id, constituency_id]
+      );
 
-    console.log("🆔 Inserted userId:", userId);
-    console.log("🗳 Saving admin...");
+      // Commit the transaction
+      await connection.commit();
+      connection.release();
 
-    // Insert the admin into the database
-    await pool.query(`
-      INSERT INTO admins (user_id, state_id, district_id, constituency_id)
-      VALUES (?, ?, ?, ?)
-    `, [userId, state_id, district_id, constituency_id]);
+      console.log("✅ Admin created successfully");
+      res.status(201).json({
+        message: 'Admin created successfully',
+        userId: userId
+      });
 
-    console.log("✅ Admin created");
-    res.status(201).json({ message: 'Admin created successfully' });
+    } catch (error) {
+      // Rollback the transaction if any error occurs
+      await connection.rollback();
+      connection.release();
+      throw error;
+    }
 
   } catch (error) {
     console.error('❌ Error saving admin:', error);
-    res.status(500).json({ error: 'Failed to create admin', details: error.message });
+
+    // Delete uploaded file if registration failed
+    if (req.file) {
+      fs.unlink(path.join(photoDir, req.file.filename), (err) => {
+        if (err) console.error('Error deleting uploaded file:', err);
+      });
+    }
+
+    res.status(500).json({
+      error: 'Failed to create admin',
+      details: error.message
+    });
   }
 });
-  
+
+
+app.get('/api/admins', async (req, res) => {
+  try {
+    const admins = await query({
+      query: `
+        SELECT 
+          u.id,
+          u.role_id,
+          u.name,
+          u.email,
+          u.phone,
+          u.dob,
+          u.status,
+          a.constituency_id,
+          a.state_id,
+          a.district_id,
+          vc.name AS constituency_name,
+          s.name AS state_name,
+          d.name AS district_name
+        FROM admins a
+        JOIN users u ON a.user_id = u.id
+        LEFT JOIN vidhansabha_constituencies vc ON a.constituency_id = vc.id
+        LEFT JOIN states s ON a.state_id = s.id
+        LEFT JOIN districts d ON a.district_id = d.id
+        ORDER BY u.name ASC
+      `
+    });
+
+    res.status(200).json(admins);
+  } catch (error) {
+    console.error('Error fetching admins:', error);
+    res.status(500).json({ error: 'Failed to fetch admins' });
+  }
+});
+
+const safe = (value) => {
+  return value === undefined || value === null || value === '' ? null : value;
+};
+
+
+// Create Candidate
+app.post('/api/candidates', upload.fields([
+  { name: 'photo' },
+  { name: 'signature' },
+  { name: 'income_photo' },
+  { name: 'nationality_photo' },
+  { name: 'education_photo' },
+  { name: 'cast_photo' },
+  { name: 'non_crime_photo' },
+  { name: 'party_logo' },
+]), async (req, res) => {
+  try {
+    const {
+      name, email, aadhar, phone, dob, district_id, state_id,
+      loksabha_id, vidhansabha_id, local_body_id, ward_id, booth_id, election_id,
+      income, income_no, nationality, nationality_no,
+      education, religion, cast, cast_no, non_crime_no,
+      party, amount, method
+    } = req.body;
+
+    const files = req.files;
+    const getFile = (key) => files[key]?.[0]?.filename || null;
+
+    const result = await query({
+      query: `
+        INSERT INTO candidates (
+          name, email, aadhar, phone, dob, district_id, state_id, loksabha_id,
+          vidhansabha_id, local_body_id, ward_id, booth_id, election_id,
+          income, income_no, income_photo, nationality, nationality_no, nationality_photo,
+          education, education_photo, religion, cast, cast_no, cast_photo,
+          non_crime_no, non_crime_photo, party, party_logo, photo, signature,
+          amount, method, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+      `,
+      values: [
+        safe(name), safe(email), safe(aadhar), safe(phone), safe(dob), safe(district_id), safe(state_id), safe(loksabha_id),
+        safe(vidhansabha_id), safe(local_body_id), safe(ward_id), safe(booth_id), safe(election_id),
+        safe(income), safe(income_no), safe(getFile('income_photo')), safe(nationality), safe(nationality_no), safe(getFile('nationality_photo')),
+        safe(education), safe(getFile('education_photo')), safe(religion), safe(cast), safe(cast_no), safe(getFile('cast_photo')),
+        safe(non_crime_no), safe(getFile('non_crime_photo')), safe(party), safe(getFile('party_logo')), safe(getFile('photo')), safe(getFile('signature')),
+        safe(amount), safe(method)
+      ]
+
+    });
+
+    res.status(201).json({ message: 'Candidate registered successfully', candidateId: result.insertId });
+  } catch (error) {
+    console.error('Error creating candidate:', error);
+    res.status(500).json({ error: 'Failed to register candidate', details: error.message });
+  }
+});
+
+
+// Add this to your index.js file, preferably with other POST endpoints
+
+// 9. Register Voter
+app.post('/api/voters', upload.single('photo'), async (req, res) => {
+  console.log("👉 Incoming request to /api/voters");
+
+  try {
+    console.log("📦 Request body:", req.body);
+    console.log("🖼 Uploaded file:", req.file);
+
+    // Destructure form data from req.body
+    const {
+      name,
+      email,
+      phone,
+      dob,
+      voter_id,
+      password,
+      state,
+      district,
+      loksabhaWard,
+      vidhansabhaWard,
+      localbody,
+      ward,
+      booth
+    } = req.body;
+
+    // Validate required fields
+    if (!name || !email || !phone || !voter_id || !password || !state || !district) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Check if email already exists
+    const [existingUser] = await pool.query(
+      'SELECT id FROM users WHERE email = ?',
+      [email]
+    );
+
+    if (existingUser.length > 0) {
+      return res.status(400).json({ error: 'Email already exists' });
+    }
+
+    // Check if voter ID already exists
+    const [existingVoter] = await pool.query(
+      'SELECT id FROM voters WHERE voter_id = ?',
+      [voter_id]
+    );
+
+    if (existingVoter.length > 0) {
+      return res.status(400).json({ error: 'Voter ID already exists' });
+    }
+
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const photo_name = req.file ? req.file.filename : null;
+
+    // Start a transaction
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    try {
+      // Insert user into the users table (role_id 3 for voter)
+      const [userResult] = await connection.query(
+        `INSERT INTO users 
+        (role_id, name, email, phone, dob, password, photo_name, status) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'active')`,
+        [3, name, email, phone, dob || null, hashedPassword, photo_name]
+      );
+
+      const userId = userResult.insertId;
+
+      // Insert voter into the voters table
+      await connection.query(
+        `INSERT INTO voters 
+        (user_id, voter_id, state_id, district_id, loksabha_ward_id, 
+         vidhansabha_ward_id, municipal_corp_id, municipal_corp_ward_id, booth_id, photo) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          userId,
+          voter_id,
+          state,
+          district,
+          loksabhaWard || null,
+          vidhansabhaWard || null,
+          localbody || null,
+          ward || null,
+          booth || null,
+          photo_name
+        ]
+      );
+
+      // Commit the transaction
+      await connection.commit();
+      connection.release();
+
+      console.log("✅ Voter registered successfully");
+      res.status(201).json({
+        message: 'Voter registered successfully',
+        userId: userId
+      });
+
+    } catch (error) {
+      // Rollback the transaction if any error occurs
+      await connection.rollback();
+      connection.release();
+
+      // Delete uploaded file if registration failed
+      if (req.file) {
+        fs.unlink(path.join(photoDir, req.file.filename), (err) => {
+          if (err) console.error('Error deleting uploaded file:', err);
+        });
+      }
+
+      throw error;
+    }
+
+  } catch (error) {
+    console.error('❌ Error registering voter:', error);
+    res.status(500).json({
+      error: 'Failed to register voter',
+      details: error.message
+    });
+  }
+});
+
+// 10. Get admin by ID
+app.get('/api/admins/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await query({
+      query: `
+        SELECT 
+          u.id AS user_id,
+          u.name,
+          u.email,
+          u.phone,
+          u.dob,
+          u.status,
+          u.photo_name,
+          a.state_id,
+          a.district_id,
+          a.constituency_id,
+          s.name AS state,
+          d.name AS district,
+          vc.name AS constituency
+        FROM admins a
+        JOIN users u ON a.user_id = u.id
+        LEFT JOIN states s ON a.state_id = s.id
+        LEFT JOIN districts d ON a.district_id = d.id
+        LEFT JOIN vidhansabha_constituencies vc ON a.constituency_id = vc.id
+        WHERE a.id = ?
+        LIMIT 1
+      `,
+      values: [id]
+    });
+
+    if (!result.length) {
+      return res.status(404).json({ error: 'Admin not found' });
+    }
+
+    const admin = result[0];
+    admin.photo_url = admin.photo_name
+      ? `http://localhost:3000/uploads/photos/${admin.photo_name}`
+      : null;
+
+    res.status(200).json(admin);
+  } catch (err) {
+    console.error('Error fetching admin by ID:', err);
+    res.status(500).json({ error: 'Failed to fetch admin by ID' });
+  }
+});
+
+app.post('/api/elections', async (req, res) => {
+  try {
+    // Validate required fields
+    if (!req.body.name || !req.body.type || !req.body.status || !req.body.date ||
+      !req.body.applicationStartDate || !req.body.applicationEndDate) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const result = await query({
+      query: `INSERT INTO elections 
+    (name, type, status, election_date, application_start_date, application_end_date, 
+     result_date, state_id, district_id, loksabha_id, vidhansabha_id, local_body_id, description)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      values: [
+        req.body.name,
+        req.body.type,
+        req.body.status,
+        req.body.date,
+        req.body.applicationStartDate,
+        req.body.applicationEndDate,
+        req.body.resultDate || null,
+        req.body.state || null,
+        req.body.district || null,
+        req.body.loksabha || null,
+        req.body.vidhansabha || null,
+        req.body.localBody || null,
+        req.body.description || null
+      ]
+    });
+
+
+    res.status(201).json({ message: 'Election created successfully', id: result.insertId });
+  } catch (error) {
+    console.error('Error inserting election:', error);
+    res.status(500).json({
+      error: 'Failed to create election',
+      details: error.message
+    });
+  }
+});
+
+
+
 
 // ========== START SERVER ==========
 app.listen(PORT, () => {

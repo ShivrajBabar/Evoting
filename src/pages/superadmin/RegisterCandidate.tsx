@@ -31,6 +31,12 @@ const formSchema = z.object({
   aadhar: z.string().min(12, {
     message: "Aadhar number must be 12 digits.",
   }),
+  income: z.string().min(1, {
+    message: "Please enter annual income",
+  }),
+  income_no: z.string().min(1, {
+    message: "Please enter income certificate number",
+  }),
   dob: z.string(),
   state: z.string(),
   district: z.string(),
@@ -40,8 +46,6 @@ const formSchema = z.object({
   ward: z.string(),
   booth: z.string(),
   election: z.string(),
-  income: z.string().optional(),
-  income_no: z.string().optional(),
   nationality: z.string(),
   nationality_no: z.string(),
   education: z.string(),
@@ -150,19 +154,6 @@ const RegisterCandidate = () => {
   };
 
 
-  // Handle loksabha change to update vidhansabha dropdown
-  // const handleLoksabhaChange = (loksabha: string) => {
-  //   form.setValue("loksabha", loksabha);
-  //   form.setValue("vidhansabha", "");
-  //   form.setValue("localbody", "");
-  //   form.setValue("ward", "");
-  //   form.setValue("booth", "");
-  //   setVidhansabhas(allVidhansabhas[loksabha as keyof typeof allVidhansabhas] || []);
-  //   setLocalbodies([]);
-  //   setWards([]);
-  //   setBooths([]);
-  // };
-
   const handleLoksabhaChange = (loksabhaId: string) => {
     form.setValue("loksabha", loksabhaId);
     form.setValue("vidhansabha", "");
@@ -213,14 +204,85 @@ const RegisterCandidate = () => {
   const parties = ["Democratic Party", "Progressive Alliance", "National Front", "People's Party"];
 
   function onSubmit(values: z.infer<typeof formSchema>) {
-    // In a real application, this would send data to a backend API
-    console.log(values);
-    toast({
-      title: "Candidate Registered",
-      description: `${values.name} has been registered successfully.`,
+    const formData = new FormData();
+
+    // Map frontend field names to backend expected names
+    const fieldMappings: Record<string, string> = {
+      state: 'state_id',
+      district: 'district_id',
+      loksabha: 'loksabha_id',
+      vidhansabha: 'vidhansabha_id',
+      localbody: 'local_body_id',
+      ward: 'ward_id',
+      booth: 'booth_id',
+      election: 'election_id'
+    };
+
+    // Append all form values with proper field name mapping
+    Object.entries(values).forEach(([key, value]) => {
+      const fieldName = fieldMappings[key] || key;
+      if (value !== undefined && value !== null && value !== '') {
+        formData.append(fieldName, value.toString());
+      }
     });
-    form.reset();
+
+    // Helper function to append files safely
+    const appendFileToFormData = (fieldName: string) => {
+      const fileInput = document.querySelector(`input[name="${fieldName}"]`) as HTMLInputElement;
+      if (fileInput?.files?.[0]) {
+        formData.append(fieldName, fileInput.files[0]);
+      }
+    };
+
+    // Append all files
+    const fileFields = [
+      'photo',
+      'signature',
+      'income_photo',
+      'nationality_photo',
+      'education_photo',
+      'cast_photo',
+      'non_crime_photo',
+      'party_logo'
+    ];
+
+    fileFields.forEach(appendFileToFormData);
+
+    // Submit the form data
+    fetch('http://localhost:3000/api/candidates', {
+      method: 'POST',
+      body: formData
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Registration failed');
+        }
+        return response.json();
+      })
+      .then((data) => {
+        toast({
+          title: "Registration Successful",
+          description: `Candidate ID: ${data.candidateId}`,
+        });
+        form.reset();
+
+        // Optional: Reset file inputs
+        fileFields.forEach(fieldName => {
+          const fileInput = document.querySelector(`input[name="${fieldName}"]`) as HTMLInputElement;
+          if (fileInput) fileInput.value = '';
+        });
+      })
+      .catch((error) => {
+        console.error('Registration Error:', error);
+        toast({
+          title: "Registration Failed",
+          description: error.message || 'An unexpected error occurred',
+          variant: "destructive"
+        });
+      });
   }
+
 
   return (
     <Layout>
@@ -560,6 +622,45 @@ const RegisterCandidate = () => {
                     )}
                   />
 
+
+                  {/* New Annual Income Field */}
+                  <FormField
+                    control={form.control}
+                    name="income"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Annual Income*</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Enter annual income"
+                            type="number"
+                            {...field}
+                            onChange={(e) => field.onChange(e.target.value)}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* New Income Certificate No Field */}
+                  <FormField
+                    control={form.control}
+                    name="income_no"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Income Certificate Number*</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Enter income certificate number"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
                   <FormField
                     control={form.control}
                     name="religion"
@@ -702,35 +803,35 @@ const RegisterCandidate = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <FormLabel>Candidate Photo</FormLabel>
-                      <Input type="file" />
+                      <Input type="file" name='photo' />
                     </div>
                     <div>
                       <FormLabel>Signature</FormLabel>
-                      <Input type="file" />
+                      <Input type="file" name="signature" />
                     </div>
                     <div>
                       <FormLabel>Income Certificate</FormLabel>
-                      <Input type="file" />
+                      <Input type="file" name="income_photo" />
                     </div>
                     <div>
                       <FormLabel>Nationality Certificate</FormLabel>
-                      <Input type="file" />
+                      <Input type="file" name="nationality_photo" />
                     </div>
                     <div>
                       <FormLabel>Education Certificate</FormLabel>
-                      <Input type="file" />
+                      <Input type="file" name="education_photo" />
                     </div>
                     <div>
                       <FormLabel>Cast Certificate</FormLabel>
-                      <Input type="file" />
+                      <Input type="file" name="cast_photo" />
                     </div>
                     <div>
                       <FormLabel>Non-Criminal Certificate</FormLabel>
-                      <Input type="file" />
+                      <Input type="file" name="non_crime_photo" />
                     </div>
                     <div>
                       <FormLabel>Party Logo</FormLabel>
-                      <Input type="file" />
+                      <Input type="file" name="party_logo" />
                     </div>
                   </div>
                 </div>

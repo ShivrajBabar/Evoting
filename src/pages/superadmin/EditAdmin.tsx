@@ -1,36 +1,50 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import Layout from '@/components/Layout';
+import Layout from "@/components/Layout";
 import { useToast } from "@/components/ui/use-toast";
-import { useParams, useNavigate } from 'react-router-dom';
-import { 
-  Form, 
-  FormControl, 
-  FormField, 
-  FormItem, 
-  FormLabel, 
-  FormMessage 
-} from '@/components/ui/form';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { states, allDistricts, allVidhansabhas, getOptionsForDropdown } from '@/utils/locationData';
+import { useParams, useNavigate } from "react-router-dom";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Avatar,
+  AvatarImage,
+  AvatarFallback,
+} from "@/components/ui/avatar";
+import {
+  states,
+  allDistricts,
+  allVidhansabhas,
+  getOptionsForDropdown,
+} from "@/utils/locationData";
 
 const formSchema = z.object({
-  name: z.string().min(2, {
-    message: "Name must be at least 2 characters.",
-  }),
-  email: z.string().email({
-    message: "Please enter a valid email address.",
-  }),
-  phone: z.string().min(10, {
-    message: "Phone number must be at least 10 digits.",
-  }),
+  name: z.string().min(2, { message: "Name must be at least 2 characters." }),
+  email: z.string().email({ message: "Please enter a valid email address." }),
+  phone: z.string().min(10, { message: "Phone number must be at least 10 digits." }),
   dob: z.string(),
   state: z.string(),
   district: z.string(),
@@ -41,88 +55,151 @@ const EditAdmin = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  
-  // States for dependent dropdowns
-  const [districts, setDistricts] = useState<string[]>([]);
-  const [vidhansabhas, setVidhansabhas] = useState<string[]>([]);
 
-  // Mock admin data (would come from API)
-  const adminData = {
-    id: parseInt(id || "1"),
-    name: "Vikram Singh",
-    email: "vikram@example.com",
-    phone: "9876543210",
-    dob: "1985-08-20",
-    state: "Maharashtra",
-    district: "Mumbai",
-    vidhansabha: "Borivali",
-  };
+
+  const [avatarUrl, setAvatarUrl] = useState<string>("/placeholder.svg");
+
+  const [states, setStates] = useState<{ value: string, label: string }[]>([]);
+  const [districts, setDistricts] = useState<{ value: string, label: string }[]>([]);
+  const [vidhansabhas, setVidhansabhas] = useState<{ value: string, label: string }[]>([]);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: adminData,
+    defaultValues: {
+      name: "",
+      email: "",
+      phone: "",
+      dob: "",
+      state: "",
+      district: "",
+      vidhansabha: "",
+    },
   });
 
-  // Set up initial dropdown values based on admin data
+  // Fetch admin data by ID
   useEffect(() => {
-    if (adminData.state) {
-      const newDistricts = getOptionsForDropdown(allDistricts, adminData.state);
-      setDistricts(newDistricts);
-      
-      if (adminData.district) {
-        // Get Lok Sabha constituencies for district
-        const loksabhas = getOptionsForDropdown(allDistricts, adminData.district);
-        let allAvailableVidhansabhas: string[] = [];
-        
-        // Collect all Vidhan Sabha constituencies
-        loksabhas.forEach(loksabha => {
-          const vidhansabhasForLoksabha = getOptionsForDropdown(allVidhansabhas, loksabha);
-          allAvailableVidhansabhas = [...allAvailableVidhansabhas, ...vidhansabhasForLoksabha];
-        });
-        
-        setVidhansabhas(Array.from(new Set(allAvailableVidhansabhas)));
-      }
+    const fetchAll = async () => {
+      await fetchStates(); // 🔧 this was missing!
+      if (id) await fetchAdmin();
+    };
+
+    fetchAll();
+  }, [id]);
+
+
+  const fetchAdmin = async () => {
+    try {
+      const res = await fetch(`http://localhost:3000/api/admins/${id}`);
+      if (!res.ok) throw new Error("Failed to load admin data");
+      const data = await res.json();
+
+      form.reset({
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        dob: data.dob || "",
+        state: data.state_id.toString(),
+        district: data.district_id.toString(),
+        vidhansabha: data.constituency_id.toString(),
+      });
+
+      setAvatarUrl(data.photo_url || "/placeholder.svg");
+
+      await handleStateChange(data.state_id.toString());
+      await handleDistrictChange(data.district_id.toString());
+    } catch (err: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: err.message,
+      });
     }
-  }, [adminData]);
-
-  // Handle state change to update districts dropdown
-  const handleStateChange = (state: string) => {
-    form.setValue("state", state);
-    form.setValue("district", "");
-    form.setValue("vidhansabha", "");
-    
-    const newDistricts = getOptionsForDropdown(allDistricts, state);
-    setDistricts(newDistricts);
-    setVidhansabhas([]);
   };
 
-  // Handle district change to update vidhansabha dropdown
-  const handleDistrictChange = (district: string) => {
-    form.setValue("district", district);
-    form.setValue("vidhansabha", "");
-    
-    // For districts, we need to get Lok Sabha constituencies first, then gather all Vidhan Sabha from them
-    const loksabhas = getOptionsForDropdown(allDistricts, district);
-    let allAvailableVidhansabhas: string[] = [];
-    
-    // Collect all Vidhan Sabha constituencies from all Lok Sabha constituencies in this district
-    loksabhas.forEach(loksabha => {
-      const vidhansabhasForLoksabha = getOptionsForDropdown(allVidhansabhas, loksabha);
-      allAvailableVidhansabhas = [...allAvailableVidhansabhas, ...vidhansabhasForLoksabha];
-    });
-    
-    setVidhansabhas(Array.from(new Set(allAvailableVidhansabhas)));
+
+
+
+  const fetchStates = async () => {
+    try {
+      const response = await fetch('http://localhost:3000/api/states');
+      const data = await response.json();
+      setStates(data.map((state: any) => ({
+        value: state.id.toString(),
+        label: state.name
+      })));
+    } catch (error) {
+      console.error('Error fetching states:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch states",
+        variant: "destructive"
+      });
+    }
   };
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    // In a real application, this would send data to a backend API
-    console.log(values);
-    toast({
-      title: "Admin Updated",
-      description: `${values.name}'s information has been updated successfully.`,
-    });
-    navigate('/superadmin/admins');
-  }
+  const handleStateChange = async (stateId: string) => {
+    try {
+      const response = await fetch(`http://localhost:3000/api/districts?state_id=${stateId}`);
+      const data = await response.json();
+      setDistricts(data.map((district: any) => ({
+        value: district.id.toString(),
+        label: district.name
+      })));
+      // Clear dependent fields
+      setVidhansabhas([]);
+      form.setValue('district', '');
+      form.setValue('vidhansabha', '');
+    } catch (error) {
+      console.error('Error fetching districts:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch districts",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDistrictChange = async (districtId: string) => {
+    try {
+      const response = await fetch(
+        `http://localhost:3000/api/constituencies?district_id=${districtId}&type=vidhansabha`
+      );
+      const data = await response.json();
+      setVidhansabhas(data.map((constituency: any) => ({
+        value: constituency.id.toString(),
+        label: constituency.name
+      })));
+      form.setValue('vidhansabha', '');
+    } catch (error) {
+      console.error('Error fetching vidhansabhas:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch Vidhan Sabha constituencies",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    try {
+      const res = await fetch(`http://localhost:3000/api/admins/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      });
+
+      if (!res.ok) throw new Error("Failed to update admin");
+
+      toast({
+        title: "Admin Updated",
+        description: `${values.name}'s info has been successfully updated.`,
+      });
+
+      navigate("/superadmin/admins");
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Error", description: err.message });
+    }
+  };
 
   return (
     <Layout>
@@ -136,84 +213,50 @@ const EditAdmin = () => {
           <CardHeader>
             <div className="flex items-center space-x-4">
               <Avatar className="h-20 w-20">
-                <AvatarImage src="/placeholder.svg" alt={adminData.name} />
-                <AvatarFallback>{adminData.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+                <AvatarImage src={avatarUrl} alt="Admin Photo" />
+                <AvatarFallback>AD</AvatarFallback>
               </Avatar>
               <div>
-                <CardTitle>{adminData.name}</CardTitle>
-                <CardDescription>{adminData.vidhansabha} Constituency Admin</CardDescription>
+                <CardTitle>{form.watch("name")}</CardTitle>
+                <CardDescription>{form.watch("vidhansabha")} Constituency Admin</CardDescription>
               </div>
             </div>
           </CardHeader>
           <CardContent>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6" noValidate>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField
-                    control={form.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Full Name*</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Enter full name" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  {/* Name, Email, Phone, DOB */}
+                  {["name", "email", "phone", "dob"].map((field) => (
+                    <FormField
+                      key={field}
+                      control={form.control}
+                      name={field as any}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{field.name.charAt(0).toUpperCase() + field.name.slice(1)}*</FormLabel>
+                          <FormControl>
+                            <Input {...field} type={field.name === "dob" ? "date" : "text"} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  ))}
 
-                  <FormField
-                    control={form.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Email*</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Enter email address" type="email" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="phone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Phone Number*</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Enter phone number" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="dob"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Date of Birth*</FormLabel>
-                        <FormControl>
-                          <Input type="date" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
+                  {/* State Dropdown */}
                   <FormField
                     control={form.control}
                     name="state"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>State*</FormLabel>
-                        <Select 
-                          onValueChange={(value) => handleStateChange(value)} 
-                          defaultValue={field.value}
+                        <Select
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            handleStateChange(value);
+                          }}
+                          value={field.value}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -222,7 +265,9 @@ const EditAdmin = () => {
                           </FormControl>
                           <SelectContent>
                             {states.map((state) => (
-                              <SelectItem key={state} value={state}>{state}</SelectItem>
+                              <SelectItem key={state.value} value={state.value}>
+                                {state.label}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -231,15 +276,19 @@ const EditAdmin = () => {
                     )}
                   />
 
+                  {/* District Dropdown */}
                   <FormField
                     control={form.control}
                     name="district"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>District*</FormLabel>
-                        <Select 
-                          onValueChange={(value) => handleDistrictChange(value)} 
-                          defaultValue={field.value}
+                        <Select
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            handleDistrictChange(value);
+                          }}
+                          value={field.value}
                           disabled={districts.length === 0}
                         >
                           <FormControl>
@@ -249,7 +298,9 @@ const EditAdmin = () => {
                           </FormControl>
                           <SelectContent>
                             {districts.map((district) => (
-                              <SelectItem key={district} value={district}>{district}</SelectItem>
+                              <SelectItem key={district.value} value={district.value}>
+                                {district.label}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -258,15 +309,16 @@ const EditAdmin = () => {
                     )}
                   />
 
+                  {/* Vidhansabha Dropdown */}
                   <FormField
                     control={form.control}
                     name="vidhansabha"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Vidhan Sabha Constituency*</FormLabel>
-                        <Select 
+                        <Select
                           onValueChange={field.onChange}
-                          defaultValue={field.value}
+                          value={field.value}
                           disabled={vidhansabhas.length === 0}
                         >
                           <FormControl>
@@ -276,7 +328,9 @@ const EditAdmin = () => {
                           </FormControl>
                           <SelectContent>
                             {vidhansabhas.map((constituency) => (
-                              <SelectItem key={constituency} value={constituency}>{constituency}</SelectItem>
+                              <SelectItem key={constituency.value} value={constituency.value}>
+                                {constituency.label}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -286,15 +340,14 @@ const EditAdmin = () => {
                   />
                 </div>
 
+                {/* File upload (optional) */}
                 <div>
                   <FormLabel>Update Photo</FormLabel>
                   <Input type="file" className="mt-1" />
                 </div>
 
                 <div className="flex justify-end space-x-4">
-                  <Button type="button" variant="outline" onClick={() => navigate('/superadmin/admins')}>
-                    Cancel
-                  </Button>
+                  <Button type="button" variant="outline" onClick={() => navigate("/superadmin/admins")}>Cancel</Button>
                   <Button type="submit">Save Changes</Button>
                 </div>
               </form>

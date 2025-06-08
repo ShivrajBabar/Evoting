@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -9,28 +8,18 @@ import { Button } from "@/components/ui/button";
 import Layout from '@/components/Layout';
 import { useToast } from "@/components/ui/use-toast";
 import { Textarea } from "@/components/ui/textarea";
-import { 
-  Form, 
-  FormControl, 
-  FormField, 
-  FormItem, 
-  FormLabel, 
-  FormMessage 
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage
 } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { 
-  states, 
-  allDistricts, 
-  allLoksabhas, 
-  allVidhansabhas, 
-  allLocalBodies, 
-  getOptionsForDropdown 
-} from '@/utils/locationData';
 
 const formSchema = z.object({
-  name: z.string().min(2, {
-    message: "Name must be at least 2 characters.",
-  }),
+  name: z.string().min(2, { message: "Name must be at least 2 characters." }),
   type: z.string(),
   status: z.string(),
   date: z.string(),
@@ -48,53 +37,149 @@ const formSchema = z.object({
 
 const CreateElection = () => {
   const { toast } = useToast();
-  
-  // State for dependent dropdowns
-  const [selectedState, setSelectedState] = useState("");
-  const [selectedDistrict, setSelectedDistrict] = useState("");
-  const [selectedLoksabha, setSelectedLoksabha] = useState("");
-  const [selectedVidhansabha, setSelectedVidhansabha] = useState("");
-  const [selectedLocalBody, setSelectedLocalBody] = useState("");
-
-  // Options for dropdowns based on selections
-  const districtOptions = selectedState ? getOptionsForDropdown(allDistricts, selectedState) : [];
-  const loksabhaOptions = selectedDistrict ? getOptionsForDropdown(allLoksabhas, selectedDistrict) : [];
-  const vidhansabhaOptions = selectedLoksabha ? getOptionsForDropdown(allVidhansabhas, selectedLoksabha) : [];
-  const localBodyOptions = selectedVidhansabha ? getOptionsForDropdown(allLocalBodies, selectedVidhansabha) : [];
-
-  // Mock data for dropdowns
-  const electionTypes = ["Lok Sabha", "Vidhan Sabha", "Local Body", "Panchayat"];
-  const electionStatuses = ["Preparation", "Scheduled", "Active", "Completed"];
-
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      name: "",
-      type: "",
-      status: "Preparation",
-      date: "",
-      applicationStartDate: "",
-      applicationEndDate: "",
-      resultDate: "",
-      description: "",
-      state: "",
-      district: "",
-      loksabha: "",
-      vidhansabha: "",
-      localBody: "",
-      ward: "",
-    },
   });
+  const [states, setStates] = useState([]);
+  const [districts, setDistricts] = useState([]);
+  const [loksabhas, setLoksabhas] = useState([]);
+  const [vidhansabhas, setVidhansabhas] = useState([]);
+  const [localBodies, setLocalBodies] = useState([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    // In a real application, this would send data to a backend API
-    console.log(values);
-    toast({
-      title: "Election Created",
-      description: `${values.name} has been created successfully.`,
-    });
-    form.reset();
+  const [selectedState, setSelectedState] = useState('');
+  const [selectedDistrict, setSelectedDistrict] = useState('');
+  const [selectedLoksabha, setSelectedLoksabha] = useState('');
+  const [selectedVidhansabha, setSelectedVidhansabha] = useState('');
+  const [selectedLocalBody, setSelectedLocalBody] = useState("");
+
+  useEffect(() => {
+    fetchStates();
+  }, []);
+
+  const fetchStates = async () => {
+    try {
+      const res = await fetch('http://localhost:3000/api/states');
+      const data = await res.json();
+      setStates(data.map((s) => ({ value: s.id.toString(), label: s.name })));
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to fetch states', variant: 'destructive' });
+    }
+  };
+
+  const handleStateChange = async (stateId: string) => {
+    try {
+      const districtsRes = await fetch(`http://localhost:3000/api/districts?state_id=${stateId}`);
+      const districtsData = await districtsRes.json();
+      setDistricts(districtsData.map((d) => ({ value: d.id.toString(), label: d.name })));
+
+      const loksabhaRes = await fetch(`http://localhost:3000/api/constituencies?state_id=${stateId}&type=loksabha`);
+      const loksabhaData = await loksabhaRes.json();
+      setLoksabhas(loksabhaData.map((c) => ({ value: c.id.toString(), label: c.name })));
+
+      setLocalBodies([]);
+      form.resetField("district");
+      form.resetField("loksabha");
+      form.resetField("vidhansabha");
+      form.resetField("localBody");
+      form.resetField("ward");
+
+      setSelectedState(stateId);
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to fetch data on state change', variant: 'destructive' });
+    }
+  };
+
+  const handleDistrictChange = async (districtId: string) => {
+    try {
+      const vidhansabhaRes = await fetch(`http://localhost:3000/api/constituencies?district_id=${districtId}&type=vidhansabha`);
+      const vidhansabhaData = await vidhansabhaRes.json();
+      setVidhansabhas(vidhansabhaData.map((c) => ({ value: c.id.toString(), label: c.name })));
+
+      setLocalBodies([]);
+      form.resetField("vidhansabha");
+      form.resetField("localBody");
+      form.resetField("ward");
+
+      setSelectedDistrict(districtId);
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to fetch Vidhan Sabha constituencies', variant: 'destructive' });
+    }
+  };
+
+  const handleLoksabhaChange = (loksabhaId: string) => {
+    setSelectedLoksabha(loksabhaId);
+  };
+
+  const handleVidhansabhaChange = async (vidhansabhaId: string) => {
+    try {
+      const districtId = form.getValues("district");
+      setSelectedVidhansabha(vidhansabhaId);
+
+      const res = await fetch(`http://localhost:3000/api/local-bodies?district_id=${districtId}`);
+      const data = await res.json();
+      setLocalBodies(data.map((b) => ({ value: b.id.toString(), label: b.name })));
+
+      form.resetField("localBody");
+      form.resetField("ward");
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to fetch local bodies', variant: 'destructive' });
+    }
+  };
+
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    setIsSubmitting(true);
+    try {
+      const response = await fetch('http://localhost:3000/api/elections', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: values.name,
+          type: values.type,
+          status: values.status,
+          date: values.date,
+          applicationStartDate: values.applicationStartDate,
+          applicationEndDate: values.applicationEndDate,
+          resultDate: values.resultDate || null,
+          state: values.state || null,
+          district: values.district || null,
+          loksabha: values.loksabha || null,
+          vidhansabha: values.vidhansabha || null,
+          localBody: values.localBody || null,
+          description: values.description || null
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        // If the server returns an error message, use it
+        const errorMessage = data.error || 'Failed to create election';
+        throw new Error(errorMessage);
+      }
+
+      toast({
+        title: "Election Created",
+        description: `${values.name} has been created successfully.`,
+        variant: "default"
+      });
+      form.reset();
+    } catch (error) {
+      console.error('Error creating election:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to create election",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   }
+
+  const electionTypes = ["Lok Sabha", "Vidhan Sabha", "Local Body", "Panchayat"];
+  const electionStatuses = ["Preparation", "Scheduled", "Active", "Completed"];
 
   return (
     <Layout>
@@ -243,7 +328,8 @@ const CreateElection = () => {
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>State</FormLabel>
-                            <Select 
+                            <Select
+                              value={field.value}
                               onValueChange={(value) => {
                                 field.onChange(value);
                                 setSelectedState(value);
@@ -256,8 +342,8 @@ const CreateElection = () => {
                                 form.setValue("vidhansabha", "");
                                 form.setValue("localBody", "");
                                 form.setValue("ward", "");
-                              }} 
-                              defaultValue={field.value}
+                                handleStateChange(value);
+                              }}
                             >
                               <FormControl>
                                 <SelectTrigger>
@@ -266,7 +352,9 @@ const CreateElection = () => {
                               </FormControl>
                               <SelectContent>
                                 {states.map((state) => (
-                                  <SelectItem key={state} value={state}>{state}</SelectItem>
+                                  <SelectItem key={state.value} value={state.value}>
+                                    {state.label}
+                                  </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
@@ -281,19 +369,18 @@ const CreateElection = () => {
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>District</FormLabel>
-                            <Select 
+                            <Select
+                              value={field.value}
                               onValueChange={(value) => {
                                 field.onChange(value);
                                 setSelectedDistrict(value);
-                                setSelectedLoksabha("");
                                 setSelectedVidhansabha("");
                                 setSelectedLocalBody("");
-                                form.setValue("loksabha", "");
                                 form.setValue("vidhansabha", "");
                                 form.setValue("localBody", "");
                                 form.setValue("ward", "");
+                                handleDistrictChange(value);
                               }}
-                              defaultValue={field.value}
                               disabled={!selectedState}
                             >
                               <FormControl>
@@ -302,8 +389,10 @@ const CreateElection = () => {
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent>
-                                {districtOptions.map((district) => (
-                                  <SelectItem key={district} value={district}>{district}</SelectItem>
+                                {districts.map((district) => (
+                                  <SelectItem key={district.value} value={district.value}>
+                                    {district.label}
+                                  </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
@@ -318,7 +407,8 @@ const CreateElection = () => {
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>Lok Sabha Constituency</FormLabel>
-                            <Select 
+                            <Select
+                              value={field.value}
                               onValueChange={(value) => {
                                 field.onChange(value);
                                 setSelectedLoksabha(value);
@@ -327,9 +417,9 @@ const CreateElection = () => {
                                 form.setValue("vidhansabha", "");
                                 form.setValue("localBody", "");
                                 form.setValue("ward", "");
+                                handleLoksabhaChange(value);
                               }}
-                              defaultValue={field.value}
-                              disabled={!selectedDistrict}
+                              disabled={!selectedState}
                             >
                               <FormControl>
                                 <SelectTrigger>
@@ -337,8 +427,10 @@ const CreateElection = () => {
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent>
-                                {loksabhaOptions.map((loksabha) => (
-                                  <SelectItem key={loksabha} value={loksabha}>{loksabha}</SelectItem>
+                                {loksabhas.map((loksabha) => (
+                                  <SelectItem key={loksabha.value} value={loksabha.value}>
+                                    {loksabha.label}
+                                  </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
@@ -353,16 +445,17 @@ const CreateElection = () => {
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>Vidhan Sabha Constituency</FormLabel>
-                            <Select 
+                            <Select
+                              value={field.value}
                               onValueChange={(value) => {
                                 field.onChange(value);
                                 setSelectedVidhansabha(value);
                                 setSelectedLocalBody("");
                                 form.setValue("localBody", "");
                                 form.setValue("ward", "");
+                                handleVidhansabhaChange(value);
                               }}
-                              defaultValue={field.value}
-                              disabled={!selectedLoksabha}
+                              disabled={!selectedDistrict && !selectedLoksabha}
                             >
                               <FormControl>
                                 <SelectTrigger>
@@ -370,8 +463,10 @@ const CreateElection = () => {
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent>
-                                {vidhansabhaOptions.map((vidhansabha) => (
-                                  <SelectItem key={vidhansabha} value={vidhansabha}>{vidhansabha}</SelectItem>
+                                {vidhansabhas.map((vidhansabha) => (
+                                  <SelectItem key={vidhansabha.value} value={vidhansabha.value}>
+                                    {vidhansabha.label}
+                                  </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
@@ -385,13 +480,13 @@ const CreateElection = () => {
                         name="localBody"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Local Body/Panchayat</FormLabel>
-                            <Select 
+                            <FormLabel>Local Body / Panchayat</FormLabel>
+                            <Select
+                              value={field.value}
                               onValueChange={(value) => {
                                 field.onChange(value);
                                 setSelectedLocalBody(value);
                               }}
-                              defaultValue={field.value}
                               disabled={!selectedVidhansabha}
                             >
                               <FormControl>
@@ -400,8 +495,10 @@ const CreateElection = () => {
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent>
-                                {localBodyOptions.map((localBody) => (
-                                  <SelectItem key={localBody} value={localBody}>{localBody}</SelectItem>
+                                {localBodies.map((body) => (
+                                  <SelectItem key={body.value} value={body.value}>
+                                    {body.label}
+                                  </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
@@ -420,10 +517,10 @@ const CreateElection = () => {
                     <FormItem>
                       <FormLabel>Description</FormLabel>
                       <FormControl>
-                        <Textarea 
-                          placeholder="Enter details about the election" 
-                          className="resize-none" 
-                          {...field} 
+                        <Textarea
+                          placeholder="Enter details about the election"
+                          className="resize-none"
+                          {...field}
                         />
                       </FormControl>
                       <FormMessage />
@@ -432,7 +529,9 @@ const CreateElection = () => {
                 />
 
                 <div className="flex justify-end">
-                  <Button type="submit">Create Election</Button>
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? "Creating..." : "Create Election"}
+                  </Button>
                 </div>
               </form>
             </Form>
