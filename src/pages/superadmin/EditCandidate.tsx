@@ -8,17 +8,47 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import Layout from '@/components/Layout';
 import { useToast } from "@/components/ui/use-toast";
-import { 
-  Form, 
-  FormControl, 
-  FormField, 
-  FormItem, 
-  FormLabel, 
-  FormMessage 
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage
 } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+
+
+interface Candidate {
+  name: string;
+  email: string;
+  phone: string;
+  aadhar: string;
+  dob: string;
+  state_id?: number;
+  district_id?: number;
+  loksabha_id?: number;
+  vidhansabha_id?: number;
+  local_body_id?: number;
+  ward_id?: number;
+  booth_id?: number;
+  election_id?: number;
+  income?: string;
+  income_no?: string;
+  nationality: string;
+  nationality_no: string;
+  education: string;
+  religion: string;
+  cast: string;
+  cast_no: string;
+  non_crime_no: string;
+  party: string;
+  amount?: string;
+  method?: string;
+  election?: string;
+}
 
 const formSchema = z.object({
   name: z.string().min(2, {
@@ -60,196 +90,246 @@ const EditCandidate = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(true);
+  const [candidateData, setCandidateData] = useState<Candidate | null>(null);
+  type Option = { value: string; label: string };
 
   // States for dependent dropdowns
-  const [districts, setDistricts] = useState<string[]>([]);
-  const [loksabhas, setLoksabhas] = useState<string[]>([]);
-  const [vidhansabhas, setVidhansabhas] = useState<string[]>([]);
-  const [localbodies, setLocalbodies] = useState<string[]>([]);
-  const [wards, setWards] = useState<string[]>([]);
-  const [booths, setBooths] = useState<string[]>([]);
+  const [states, setStates] = useState<Option[]>([]);
+  const [districts, setDistricts] = useState<Option[]>([]);
+  const [loksabhas, setLoksabhas] = useState<Option[]>([]);
+  const [vidhansabhas, setVidhansabhas] = useState<Option[]>([]);
+  const [localbodies, setLocalbodies] = useState<Option[]>([]);
+  const [wards, setWards] = useState<Option[]>([]);
+  const [booths, setBooths] = useState<Option[]>([]);
 
-  // Mock data for dropdowns
-  const states = ["Maharashtra", "Delhi", "Karnataka", "Tamil Nadu"];
-  const allDistricts = {
-    "Maharashtra": ["Mumbai", "Pune", "Nagpur", "Thane"],
-    "Delhi": ["Central Delhi", "East Delhi", "New Delhi", "North Delhi"],
-    "Karnataka": ["Bangalore", "Mysore", "Hubli", "Mangalore"],
-    "Tamil Nadu": ["Chennai", "Coimbatore", "Madurai", "Salem"]
-  };
-  
-  const allLoksabhas = {
-    "Mumbai": ["Mumbai North", "Mumbai South", "Mumbai North East"],
-    "Pune": ["Pune", "Baramati"],
-    "Delhi": ["East Delhi", "New Delhi", "North Delhi"],
-    "Bangalore": ["Bangalore Central", "Bangalore North", "Bangalore South"]
-  };
-  
-  const allVidhansabhas = {
-    "Mumbai North": ["Borivali", "Dahisar", "Kandivali East"],
-    "Mumbai South": ["Worli", "Byculla", "Malabar Hill"],
-    "East Delhi": ["Preet Vihar", "Vishwas Nagar", "Laxmi Nagar"],
-    "Bangalore Central": ["Shivajinagar", "Shantinagar", "Gandhinagar"]
-  };
-  
-  const allLocalBodies = {
-    "Borivali": ["Borivali Municipal Corp", "Borivali Gram Panchayat"],
-    "Dahisar": ["Dahisar Municipal Corp", "Dahisar Gram Panchayat"],
-    "Worli": ["Worli Municipal Corp"],
-    "Preet Vihar": ["Preet Vihar Municipal Corp"],
-    "Shivajinagar": ["Shivajinagar Municipal Corp"]
-  };
-  
-  const allWards = {
-    "Borivali Municipal Corp": ["Ward 1", "Ward 2", "Ward 3"],
-    "Worli Municipal Corp": ["Ward A", "Ward B", "Ward C"],
-    "Preet Vihar Municipal Corp": ["Ward 10", "Ward 11", "Ward 12"],
-    "Shivajinagar Municipal Corp": ["Ward X", "Ward Y", "Ward Z"]
-  };
-  
-  const allBooths = {
-    "Ward 1": ["Booth #101", "Booth #102", "Booth #103"],
-    "Ward A": ["Booth #201", "Booth #202", "Booth #203"],
-    "Ward 10": ["Booth #301", "Booth #302", "Booth #303"],
-    "Ward X": ["Booth #401", "Booth #402", "Booth #403"]
-  };
-  
-  const elections = ["Lok Sabha Elections 2025", "Vidhan Sabha Elections 2024", "Municipal Elections 2024"];
-  const parties = ["Democratic Party", "Progressive Alliance", "National Front", "People's Party"];
-
-  // Mock candidate data (in a real app, this would come from an API)
-  const candidateData = {
-    id: 1,
-    name: "Rajesh Kumar",
-    email: "rajesh@example.com",
-    phone: "9876543210",
-    aadhar: "123456789012",
-    dob: "1980-05-15",
-    state: "Maharashtra",
-    district: "Mumbai",
-    loksabha: "Mumbai North",
-    vidhansabha: "Borivali",
-    localbody: "Borivali Municipal Corp",
-    ward: "Ward 1",
-    booth: "Booth #101",
-    election: "Lok Sabha Elections 2025",
-    income: "5,00,000",
-    income_no: "INC123456",
-    nationality: "Indian",
-    nationality_no: "NAT987654",
-    education: "Graduate",
-    religion: "Hindu",
-    cast: "General",
-    cast_no: "CAST123456",
-    non_crime_no: "NCR123456",
-    party: "Democratic Party",
-    amount: "10000",
-    method: "Online",
-  };
-
-  // Initialize form with candidate data
+  // Initialize form
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: candidateData,
+    defaultValues: {
+      name: "",
+      email: "",
+      phone: "",
+      aadhar: "",
+      dob: "",
+      state: "",
+      district: "",
+      loksabha: "",
+      vidhansabha: "",
+      localbody: "",
+      ward: "",
+      booth: "",
+      election: "",
+      income: "",
+      income_no: "",
+      nationality: "Indian",
+      nationality_no: "",
+      education: "",
+      religion: "",
+      cast: "",
+      cast_no: "",
+      non_crime_no: "",
+      party: "",
+      amount: "",
+      method: "Online",
+    },
   });
 
-  // Set up initial dropdown values based on candidate data
+  // Fetch candidate data and initialize form
   useEffect(() => {
-    if (candidateData.state) {
-      setDistricts(allDistricts[candidateData.state as keyof typeof allDistricts] || []);
-    }
-    if (candidateData.district) {
-      setLoksabhas(allLoksabhas[candidateData.district as keyof typeof allLoksabhas] || []);
-    }
-    if (candidateData.loksabha) {
-      setVidhansabhas(allVidhansabhas[candidateData.loksabha as keyof typeof allVidhansabhas] || []);
-    }
-    if (candidateData.vidhansabha) {
-      setLocalbodies(allLocalBodies[candidateData.vidhansabha as keyof typeof allLocalBodies] || []);
-    }
-    if (candidateData.localbody) {
-      setWards(allWards[candidateData.localbody as keyof typeof allWards] || []);
-    }
-    if (candidateData.ward) {
-      setBooths(allBooths[candidateData.ward as keyof typeof allBooths] || []);
-    }
-  }, []);
+    const fetchCandidate = async () => {
+      try {
+        const response = await fetch(`/api/candidates/${id}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch candidate data');
+        }
+        const data = await response.json();
+        setCandidateData(data);
 
-  // Handle state change to update districts dropdown
-  const handleStateChange = (state: string) => {
-    form.setValue("state", state);
+        // Initialize form with fetched data
+        form.reset({
+          name: data.name,
+          email: data.email,
+          phone: data.phone,
+          aadhar: data.aadhar,
+          dob: data.dob,
+          state: data.state_id?.toString(),
+          district: data.district_id?.toString(),
+          loksabha: data.loksabha_id?.toString(),
+          vidhansabha: data.vidhansabha_id?.toString(),
+          localbody: data.local_body_id?.toString(),
+          ward: data.ward_id?.toString(),
+          booth: data.booth_id?.toString(),
+          election: data.election_id?.toString(),
+          income: data.income,
+          income_no: data.income_no,
+          nationality: data.nationality,
+          nationality_no: data.nationality_no,
+          education: data.education,
+          religion: data.religion,
+          cast: data.cast,
+          cast_no: data.cast_no,
+          non_crime_no: data.non_crime_no,
+          party: data.party,
+          amount: data.amount,
+          method: data.method,
+        });
+
+        // Fetch dependent dropdown data
+        await fetchDependentData(data);
+
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+      const fetchStates = async () => {
+        const res = await fetch('http://localhost:3000/api/states');
+        const data = await res.json();
+        setStates(data.map((s: any) => ({ value: s.id.toString(), label: s.name })));
+      };
+      fetchStates();
+    };
+
+    const fetchDependentData = async (data) => {
+      try {
+        // Fetch states if not already loaded
+        if (states.length === 0) {
+          const statesRes = await fetch('/api/states');
+          const statesData = await statesRes.json();
+          setStates(statesData.map(s => ({ value: s.id.toString(), label: s.name })));
+        }
+
+        // Fetch districts if state is set
+        if (data.state_id) {
+          const districtsRes = await fetch(`/api/districts?state_id=${data.state_id}`);
+          const districtsData = await districtsRes.json();
+          setDistricts(districtsData.map(d => ({ value: d.id.toString(), label: d.name })));
+        }
+
+        // Similarly fetch other dependent data (loksabha, vidhansabha, etc.)
+        // ... (implement similar logic for other dropdowns)
+
+      } catch (error) {
+        console.error('Error fetching dependent data:', error);
+      }
+    };
+
+    fetchCandidate();
+  }, [id]);
+
+  const handleStateChange = async (stateId: string) => {
+    form.setValue("state", stateId);
     form.setValue("district", "");
     form.setValue("loksabha", "");
     form.setValue("vidhansabha", "");
     form.setValue("localbody", "");
     form.setValue("ward", "");
     form.setValue("booth", "");
-    setDistricts(allDistricts[state as keyof typeof allDistricts] || []);
-    setLoksabhas([]);
-    setVidhansabhas([]);
-    setLocalbodies([]);
-    setWards([]);
-    setBooths([]);
+
+    const res = await fetch(`http://localhost:3000/api/districts?state_id=${stateId}`);
+    const data = await res.json();
+    setDistricts(data.map((d: any) => ({ value: d.id.toString(), label: d.name })));
+
+    // Get Lok Sabha
+    const loksabhaRes = await fetch(`http://localhost:3000/api/constituencies?state_id=${stateId}&type=loksabha`);
+    const loksabhaData = await loksabhaRes.json();
+    setLoksabhas(loksabhaData.map((c: any) => ({ value: c.id.toString(), label: c.name })));
   };
 
-  // Handle district change to update loksabha dropdown
-  const handleDistrictChange = (district: string) => {
-    form.setValue("district", district);
-    form.setValue("loksabha", "");
+  const handleDistrictChange = async (districtId: string) => {
+    form.setValue("district", districtId);
     form.setValue("vidhansabha", "");
     form.setValue("localbody", "");
     form.setValue("ward", "");
     form.setValue("booth", "");
-    setLoksabhas(allLoksabhas[district as keyof typeof allLoksabhas] || []);
-    setVidhansabhas([]);
-    setLocalbodies([]);
-    setWards([]);
-    setBooths([]);
+
+    const res = await fetch(`http://localhost:3000/api/constituencies?district_id=${districtId}&type=vidhansabha`);
+    const data = await res.json();
+    setVidhansabhas(data.map((c: any) => ({ value: c.id.toString(), label: c.name })));
   };
 
-  // Handle loksabha change to update vidhansabha dropdown
-  const handleLoksabhaChange = (loksabha: string) => {
-    form.setValue("loksabha", loksabha);
+
+  const handleLoksabhaChange = (loksabhaId: string) => {
+    form.setValue("loksabha", loksabhaId);
     form.setValue("vidhansabha", "");
     form.setValue("localbody", "");
     form.setValue("ward", "");
     form.setValue("booth", "");
-    setVidhansabhas(allVidhansabhas[loksabha as keyof typeof allVidhansabhas] || []);
-    setLocalbodies([]);
-    setWards([]);
-    setBooths([]);
+    // You can optionally call APIs here if needed
   };
+
 
   // Handle vidhansabha change to update localbody dropdown
-  const handleVidhansabhaChange = (vidhansabha: string) => {
-    form.setValue("vidhansabha", vidhansabha);
+  const handleVidhansabhaChange = async (vidhansabhaId: string) => {
+    const districtId = form.getValues("district");
+    form.setValue("vidhansabha", vidhansabhaId);
     form.setValue("localbody", "");
     form.setValue("ward", "");
     form.setValue("booth", "");
-    setLocalbodies(allLocalBodies[vidhansabha as keyof typeof allLocalBodies] || []);
-    setWards([]);
-    setBooths([]);
+
+    const res = await fetch(`http://localhost:3000/api/local-bodies?district_id=${districtId}`);
+    const data = await res.json();
+    setLocalbodies(data.map((lb: any) => ({ value: lb.id.toString(), label: lb.name })));
   };
+
 
   // Handle localbody change to update ward dropdown
-  const handleLocalbodyChange = (localbody: string) => {
-    form.setValue("localbody", localbody);
+  const handleLocalbodyChange = async (localBodyId: string) => {
+    form.setValue("localbody", localBodyId);
     form.setValue("ward", "");
     form.setValue("booth", "");
-    setWards(allWards[localbody as keyof typeof allWards] || []);
-    setBooths([]);
+
+    const res = await fetch(`http://localhost:3000/api/wards?local_body_id=${localBodyId}`);
+    const data = await res.json();
+    setWards(data.map((w: any) => ({ value: w.id.toString(), label: w.name })));
   };
+
 
   // Handle ward change to update booth dropdown
-  const handleWardChange = (ward: string) => {
-    form.setValue("ward", ward);
+  const handleWardChange = async (wardId: string) => {
+    form.setValue("ward", wardId);
     form.setValue("booth", "");
-    setBooths(allBooths[ward as keyof typeof allBooths] || []);
+
+    const res = await fetch(`http://localhost:3000/api/booths?ward_id=${wardId}`);
+    const data = await res.json();
+    setBooths(data.map((b: any) => ({ value: b.id.toString(), label: b.name })));
   };
 
+  const elections = ["Lok Sabha Elections 2025", "Vidhan Sabha Elections 2024", "Municipal Elections 2024"];
+  const parties = ["Democratic Party", "Progressive Alliance", "National Front", "People's Party"];
+
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="flex justify-center items-center h-64">
+          <div>Loading candidate data...</div>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (!candidateData) {
+    return (
+      <Layout>
+        <div className="flex justify-center items-center h-64">
+          <div>Candidate not found</div>
+        </div>
+      </Layout>
+    );
+  }
+
+
+  // ... (keep your existing handler functions)
+
   function onSubmit(values: z.infer<typeof formSchema>) {
-    // In a real application, this would send data to a backend API
-    console.log(values);
+    // Update candidate logic here
+    console.log('Updating candidate with:', values);
     toast({
       title: "Candidate Updated",
       description: `${values.name}'s information has been updated successfully.`,
@@ -269,12 +349,12 @@ const EditCandidate = () => {
           <CardHeader>
             <div className="flex items-center space-x-4">
               <Avatar className="h-20 w-20">
-                <AvatarImage src="/placeholder.svg" alt={candidateData.name} />
-                <AvatarFallback>{candidateData.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+                <AvatarImage src="/placeholder.svg" alt={candidateData?.name || ''} />
+                <AvatarFallback>{(candidateData?.name || '').substring(0, 2).toUpperCase()}</AvatarFallback>
               </Avatar>
               <div>
-                <CardTitle>{candidateData.name}</CardTitle>
-                <CardDescription>{candidateData.party} | {candidateData.election}</CardDescription>
+                <CardTitle>{candidateData?.name}</CardTitle>
+                <CardDescription>{candidateData?.party} | {candidateData?.election}</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -358,8 +438,8 @@ const EditCandidate = () => {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>State*</FormLabel>
-                        <Select 
-                          onValueChange={(value) => handleStateChange(value)} 
+                        <Select
+                          onValueChange={(value) => handleStateChange(value)}
                           defaultValue={field.value}
                         >
                           <FormControl>
@@ -369,8 +449,11 @@ const EditCandidate = () => {
                           </FormControl>
                           <SelectContent>
                             {states.map((state) => (
-                              <SelectItem key={state} value={state}>{state}</SelectItem>
+                              <SelectItem key={state.value} value={state.value}>
+                                {state.label}
+                              </SelectItem>
                             ))}
+
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -384,8 +467,8 @@ const EditCandidate = () => {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>District*</FormLabel>
-                        <Select 
-                          onValueChange={(value) => handleDistrictChange(value)} 
+                        <Select
+                          onValueChange={(value) => handleDistrictChange(value)}
                           defaultValue={field.value}
                           disabled={districts.length === 0}
                         >
@@ -396,8 +479,11 @@ const EditCandidate = () => {
                           </FormControl>
                           <SelectContent>
                             {districts.map((district) => (
-                              <SelectItem key={district} value={district}>{district}</SelectItem>
+                              <SelectItem key={district.value} value={district.value}>
+                                {district.label}
+                              </SelectItem>
                             ))}
+
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -411,8 +497,8 @@ const EditCandidate = () => {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Lok Sabha Constituency*</FormLabel>
-                        <Select 
-                          onValueChange={(value) => handleLoksabhaChange(value)} 
+                        <Select
+                          onValueChange={(value) => handleLoksabhaChange(value)}
                           defaultValue={field.value}
                           disabled={loksabhas.length === 0}
                         >
@@ -423,8 +509,11 @@ const EditCandidate = () => {
                           </FormControl>
                           <SelectContent>
                             {loksabhas.map((loksabha) => (
-                              <SelectItem key={loksabha} value={loksabha}>{loksabha}</SelectItem>
+                              <SelectItem key={loksabha.value} value={loksabha.value}>
+                                {loksabha.label}
+                              </SelectItem>
                             ))}
+
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -438,8 +527,8 @@ const EditCandidate = () => {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Vidhan Sabha Constituency*</FormLabel>
-                        <Select 
-                          onValueChange={(value) => handleVidhansabhaChange(value)} 
+                        <Select
+                          onValueChange={(value) => handleVidhansabhaChange(value)}
                           defaultValue={field.value}
                           disabled={vidhansabhas.length === 0}
                         >
@@ -450,7 +539,9 @@ const EditCandidate = () => {
                           </FormControl>
                           <SelectContent>
                             {vidhansabhas.map((vidhansabha) => (
-                              <SelectItem key={vidhansabha} value={vidhansabha}>{vidhansabha}</SelectItem>
+                              <SelectItem key={vidhansabha.value} value={vidhansabha.value}>
+                                {vidhansabha.label}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -465,8 +556,8 @@ const EditCandidate = () => {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Local Body*</FormLabel>
-                        <Select 
-                          onValueChange={(value) => handleLocalbodyChange(value)} 
+                        <Select
+                          onValueChange={(value) => handleLocalbodyChange(value)}
                           defaultValue={field.value}
                           disabled={localbodies.length === 0}
                         >
@@ -477,7 +568,9 @@ const EditCandidate = () => {
                           </FormControl>
                           <SelectContent>
                             {localbodies.map((localbody) => (
-                              <SelectItem key={localbody} value={localbody}>{localbody}</SelectItem>
+                              <SelectItem key={localbody.value} value={localbody.value}>
+                                {localbody.label}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -492,8 +585,8 @@ const EditCandidate = () => {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Ward*</FormLabel>
-                        <Select 
-                          onValueChange={(value) => handleWardChange(value)} 
+                        <Select
+                          onValueChange={(value) => handleWardChange(value)}
                           defaultValue={field.value}
                           disabled={wards.length === 0}
                         >
@@ -504,7 +597,9 @@ const EditCandidate = () => {
                           </FormControl>
                           <SelectContent>
                             {wards.map((ward) => (
-                              <SelectItem key={ward} value={ward}>{ward}</SelectItem>
+                              <SelectItem key={ward.value} value={ward.value}>
+                                {ward.label}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -519,8 +614,8 @@ const EditCandidate = () => {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Booth*</FormLabel>
-                        <Select 
-                          onValueChange={field.onChange} 
+                        <Select
+                          onValueChange={(value) => field.onChange(value)}
                           defaultValue={field.value}
                           disabled={booths.length === 0}
                         >
@@ -531,7 +626,9 @@ const EditCandidate = () => {
                           </FormControl>
                           <SelectContent>
                             {booths.map((booth) => (
-                              <SelectItem key={booth} value={booth}>{booth}</SelectItem>
+                              <SelectItem key={booth.value} value={booth.value}>
+                                {booth.label}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -721,7 +818,7 @@ const EditCandidate = () => {
                     )}
                   />
                 </div>
-                
+
                 {/* File upload fields */}
                 <div className="pt-4">
                   <h3 className="font-semibold mb-2">Update Documents</h3>

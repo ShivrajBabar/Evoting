@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Layout from '@/components/Layout';
@@ -7,11 +6,7 @@ import { UserPlus, Search, Edit, Trash2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { Link, useNavigate } from 'react-router-dom';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { 
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
@@ -22,57 +17,29 @@ const SuperadminCandidates = () => {
   const [electionFilter, setElectionFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [candidates, setCandidates] = useState([]);
 
-  // Mock candidates data with useState to allow updates
-  const [candidates, setCandidates] = useState([
-    { 
-      id: 1, 
-      name: "Rajesh Kumar", 
-      party: "Democratic Party", 
-      age: 45, 
-      constituency: "Mumbai North",
-      election: "Lok Sabha Elections 2025",
-      status: "Approved"
-    },
-    { 
-      id: 2, 
-      name: "Sonia Singh", 
-      party: "Progressive Alliance", 
-      age: 42, 
-      constituency: "Delhi East",
-      election: "Lok Sabha Elections 2025",
-      status: "Pending"
-    },
-    { 
-      id: 3, 
-      name: "Amit Verma", 
-      party: "National Front", 
-      age: 52, 
-      constituency: "Bangalore Central",
-      election: "Vidhan Sabha Elections 2024",
-      status: "Approved"
-    },
-    { 
-      id: 4, 
-      name: "Kavita Desai", 
-      party: "People's Party", 
-      age: 39, 
-      constituency: "Chennai South",
-      election: "Municipal Elections 2024",
-      status: "Rejected"
-    },
-    { 
-      id: 5, 
-      name: "Prakash Joshi", 
-      party: "Democratic Party", 
-      age: 47, 
-      constituency: "Mumbai South",
-      election: "Lok Sabha Elections 2025",
-      status: "Pending"
-    }
-  ]);
+  useEffect(() => {
+    const fetchCandidates = async () => {
+      try {
+        const response = await fetch('/api/candidates');
+        if (!response.ok) {
+          throw new Error('Failed to fetch candidates');
+        }
+        const data = await response.json();
+        setCandidates(data);
+      } catch (error) {
+        toast({
+          title: 'Error',
+          description: error.message,
+          variant: 'destructive',
+        });
+      }
+    };
 
-  // Filter candidates based on search query and filters
+    fetchCandidates();
+  }, []);
+
   const filteredCandidates = candidates.filter(candidate => {
     const matchesSearch = searchQuery === '' || 
       candidate.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -85,22 +52,20 @@ const SuperadminCandidates = () => {
     return matchesSearch && matchesElection && matchesStatus;
   });
 
-  // Get unique elections for filter dropdown
   const elections = [...new Set(candidates.map(candidate => candidate.election))];
 
-  const handleEditCandidate = (id: number) => {
+  const handleEditCandidate = (id) => {
     navigate(`/superadmin/candidates/edit/${id}`);
   };
 
-  const handleDeleteCandidate = (id: number) => {
+  const handleDeleteCandidate = (id) => {
     toast({
       title: "Delete Candidate",
       description: `Deleting candidate with ID: ${id}`,
     });
   };
 
-  // New function to update candidate status
-  const updateCandidateStatus = (id: number, newStatus: string) => {
+  const updateCandidateStatus = (id, newStatus) => {
     setCandidates(candidates.map(candidate => 
       candidate.id === id ? { ...candidate, status: newStatus } : candidate
     ));
@@ -114,7 +79,6 @@ const SuperadminCandidates = () => {
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Header with actions */}
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-4 sm:space-y-0">
           <h1 className="text-2xl font-bold">Candidate Management</h1>
           <Button asChild>
@@ -124,7 +88,6 @@ const SuperadminCandidates = () => {
           </Button>
         </div>
 
-        {/* Search and filters */}
         <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
@@ -166,7 +129,6 @@ const SuperadminCandidates = () => {
           </div>
         </div>
 
-        {/* Candidates Table */}
         <Card>
           <CardHeader>
             <CardTitle>Election Candidates</CardTitle>
@@ -200,7 +162,7 @@ const SuperadminCandidates = () => {
                               className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium cursor-pointer
                                 ${candidate.status === 'Approved' ? 'bg-green-100 text-green-800' : 
                                 candidate.status === 'Rejected' ? 'bg-red-100 text-red-800' : 
-                                'bg-yellow-100 text-yellow-800'}`}
+                                'bg-yellow-100 text-yellow-800'}` }
                             >
                               {candidate.status}
                             </span>

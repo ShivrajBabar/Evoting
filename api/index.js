@@ -397,6 +397,115 @@ app.post('/api/candidates', upload.fields([
 });
 
 
+// Get all candidates
+app.get('/api/candidates', async (req, res) => {
+  try {
+    const candidates = await query({
+      query: `
+        SELECT 
+          c.id, c.name, c.dob, c.party, c.status, c.photo, c.party_logo, 
+          c.election_id, c.vidhansabha_id,
+          e.name AS election_name,
+          vc.name AS constituency_name
+        FROM candidates c
+        LEFT JOIN elections e ON c.election_id = e.id
+        LEFT JOIN vidhansabha_constituencies vc ON c.vidhansabha_id = vc.id
+        ORDER BY c.id DESC
+      `
+    });
+
+    // Utility function to get full file URL
+    const getFileUrl = (fileName) =>
+      fileName ? `http://localhost:${PORT}/uploads/photos/${fileName}` : null;
+
+    // Format candidate data
+    const formatted = candidates.map(candidate => ({
+      id: candidate.id,
+      name: candidate.name,
+      party: candidate.party,
+      status: candidate.status,
+      dob: candidate.dob,
+      photo: getFileUrl(candidate.photo),
+      party_logo: getFileUrl(candidate.party_logo),
+      election: candidate.election_name || 'Unknown Election',
+      constituency: candidate.constituency_name || 'Unknown Constituency'
+    }));
+
+    res.status(200).json(formatted);
+  } catch (error) {
+    console.error('Error fetching candidates:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch candidates', 
+      details: error.message 
+    });
+  }
+});
+
+
+// Get single candidate by ID
+app.get('/api/candidates/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const [candidate] = await query({
+      query: `
+        SELECT 
+          c.*,
+          e.name AS election_name,
+          vc.name AS vidhansabha_name,
+          lc.name AS loksabha_name,
+          d.name AS district_name,
+          s.name AS state_name,
+          lb.name AS local_body_name,
+          w.name AS ward_name,
+          b.name AS booth_name
+        FROM candidates c
+        LEFT JOIN elections e ON c.election_id = e.id
+        LEFT JOIN vidhansabha_constituencies vc ON c.vidhansabha_id = vc.id
+        LEFT JOIN loksabha_constituencies lc ON c.loksabha_id = lc.id
+        LEFT JOIN districts d ON c.district_id = d.id
+        LEFT JOIN states s ON c.state_id = s.id
+        LEFT JOIN local_bodies lb ON c.local_body_id = lb.id
+        LEFT JOIN wards w ON c.ward_id = w.id
+        LEFT JOIN booths b ON c.booth_id = b.id
+        WHERE c.id = ?
+        LIMIT 1
+      `,
+      values: [id]
+    });
+
+    if (!candidate) {
+      return res.status(404).json({ error: 'Candidate not found' });
+    }
+
+    // Utility function to get full file URL
+    const getFileUrl = (fileName) =>
+      fileName ? `http://localhost:${PORT}/uploads/photos/${fileName}` : null;
+
+    const formatted = {
+      ...candidate,
+      photo: getFileUrl(candidate.photo),
+      signature: getFileUrl(candidate.signature),
+      income_photo: getFileUrl(candidate.income_photo),
+      nationality_photo: getFileUrl(candidate.nationality_photo),
+      education_photo: getFileUrl(candidate.education_photo),
+      cast_photo: getFileUrl(candidate.cast_photo),
+      non_crime_photo: getFileUrl(candidate.non_crime_photo),
+      party_logo: getFileUrl(candidate.party_logo)
+    };
+
+    res.status(200).json(formatted);
+  } catch (error) {
+    console.error('Error fetching candidate:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch candidate', 
+      details: error.message 
+    });
+  }
+});
+
+
+
 // Add this to your index.js file, preferably with other POST endpoints
 
 // 9. Register Voter
