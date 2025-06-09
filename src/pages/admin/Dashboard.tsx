@@ -1,5 +1,4 @@
-
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from '@/contexts/AuthContext';
 import Layout from '@/components/Layout';
@@ -7,35 +6,77 @@ import { Users, Vote, Landmark, FileText } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Link } from 'react-router-dom';
 
+interface Voter {
+  voter_id: number;
+  name: string;
+  voter_card_number: string;
+  photo_name: string;
+}
+
+interface Candidate {
+  id: number;
+  name: string;
+  party: string;
+  status: string;
+  photo: string;
+  election: string;
+  constituency: string;
+}
+
+interface Election {
+  id: number;
+  name: string;
+  date: string;
+  status: string;
+}
+
 const AdminDashboard = () => {
   const { user } = useAuth();
 
-  // Mock statistics for dashboard
+  const [voters, setVoters] = useState<Voter[]>([]);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [elections, setElections] = useState<Election[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch data
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [votersRes, candidatesRes, electionsRes] = await Promise.all([
+          fetch('/api/voters'),
+          fetch('/api/candidates'),
+          fetch('/api/elections')
+        ]);
+
+        const votersData = await votersRes.json();
+        const candidatesData = await candidatesRes.json();
+        const electionsData = await electionsRes.json();
+
+        setVoters(votersData.slice(0, 4)); // limit to recent 4
+        setCandidates(candidatesData);
+        setElections(electionsData.filter((e: any) => e.status === 'Scheduled' || e.status === 'Active').slice(0, 4));
+      } catch (err) {
+        console.error('Error loading dashboard data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  // Stats
   const stats = [
-    { name: 'Registered Voters', value: '12,435', icon: <Users className="h-8 w-8 text-blue-500" /> },
-    { name: 'Candidates', value: '18', icon: <Vote className="h-8 w-8 text-green-500" /> },
-    { name: 'Active Elections', value: '2', icon: <Landmark className="h-8 w-8 text-purple-500" /> },
-    { name: 'Voter Turnout', value: '68%', icon: <FileText className="h-8 w-8 text-orange-500" /> },
-  ];
-
-  // Mock upcoming elections
-  const upcomingElections = [
-    { id: 1, name: 'Lok Sabha Elections', date: '2025-04-15', status: 'Scheduled' },
-    { id: 2, name: 'Municipal Corporation', date: '2024-12-12', status: 'Registration Open' },
-  ];
-
-  // Mock recently registered voters
-  const recentVoters = [
-    { id: 1, name: 'Amit Sharma', voterID: 'MH0123456789', time: '1 hour ago' },
-    { id: 2, name: 'Priya Patel', voterID: 'MH0987654321', time: '3 hours ago' },
-    { id: 3, name: 'Rahul Gupta', voterID: 'MH0192837465', time: '5 hours ago' },
-    { id: 4, name: 'Sneha Desai', voterID: 'MH0246813579', time: '1 day ago' },
+    { name: 'Registered Voters', value: voters.length.toString(), icon: <Users className="h-8 w-8 text-blue-500" /> },
+    { name: 'Candidates', value: candidates.length.toString(), icon: <Vote className="h-8 w-8 text-green-500" /> },
+    { name: 'Active Elections', value: elections.length.toString(), icon: <Landmark className="h-8 w-8 text-purple-500" /> },
+    { name: 'Voter Turnout', value: '68%', icon: <FileText className="h-8 w-8 text-orange-500" /> }, // Static for now
   ];
 
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Welcome message showing constituency */}
+        {/* Welcome */}
         <Card className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white">
           <CardContent className="p-6">
             <h2 className="text-2xl font-bold">Welcome, {user?.name}</h2>
@@ -43,7 +84,7 @@ const AdminDashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Statistics Cards */}
+        {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {stats.map((stat) => (
             <Card key={stat.name} className="stats-card border-l-4">
@@ -57,7 +98,7 @@ const AdminDashboard = () => {
             </Card>
           ))}
         </div>
-        
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Upcoming Elections */}
           <Card>
@@ -66,45 +107,53 @@ const AdminDashboard = () => {
               <CardDescription>Elections scheduled for your constituency</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {upcomingElections.map((election) => (
-                  <div key={election.id} className="flex justify-between items-center border-b pb-4 last:border-0 last:pb-0">
-                    <div>
-                      <p className="font-medium">{election.name}</p>
-                      <p className="text-sm text-gray-500">Date: {election.date}</p>
+              {loading ? (
+                <p>Loading elections...</p>
+              ) : (
+                <div className="space-y-4">
+                  {elections.map((election) => (
+                    <div key={election.id} className="flex justify-between items-center border-b pb-4 last:border-0 last:pb-0">
+                      <div>
+                        <p className="font-medium">{election.name}</p>
+                        <p className="text-sm text-gray-500">Date: {new Date(election.date).toLocaleDateString()}</p>
+                      </div>
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        {election.status}
+                      </span>
                     </div>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                      {election.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* Recently Registered Voters */}
+          {/* Recent Voters */}
           <Card>
             <CardHeader>
               <CardTitle>Recently Registered Voters</CardTitle>
               <CardDescription>Voters registered in the last 7 days</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {recentVoters.map((voter) => (
-                  <div key={voter.id} className="border-b pb-4 last:border-0 last:pb-0">
-                    <div className="flex justify-between">
-                      <p className="font-medium">{voter.name}</p>
-                      <span className="text-xs text-gray-500">{voter.time}</span>
+              {loading ? (
+                <p>Loading voters...</p>
+              ) : (
+                <div className="space-y-4">
+                  {voters.map((voter) => (
+                    <div key={voter.voter_id} className="border-b pb-4 last:border-0 last:pb-0">
+                      <div className="flex justify-between">
+                        <p className="font-medium">{voter.name}</p>
+                        <span className="text-xs text-gray-500">Just now</span>
+                      </div>
+                      <p className="text-sm text-gray-500">Voter ID: {voter.voter_card_number}</p>
                     </div>
-                    <p className="text-sm text-gray-500">Voter ID: {voter.voterID}</p>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
-        
-        {/* Quick Access Section */}
+
+        {/* Quick Actions */}
         <Card>
           <CardHeader>
             <CardTitle>Quick Actions</CardTitle>

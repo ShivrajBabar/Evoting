@@ -1,5 +1,4 @@
-
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { useAuth } from '@/contexts/AuthContext';
 import Layout from '@/components/Layout';
@@ -7,35 +6,52 @@ import { Vote, Calendar, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 
+interface Election {
+  id: number;
+  name: string;
+  date: string;
+  status: string;
+  description: string;
+}
+
 const VoterDashboard = () => {
   const { user } = useAuth();
-  
-  // Mock upcoming elections
-  const upcomingElections = [
-    { 
-      id: 1, 
-      name: 'Lok Sabha Elections 2025', 
-      date: '2025-04-15', 
-      status: 'Upcoming',
-      description: 'General elections for the lower house of the Parliament of India',
-      eligibleToVote: true
-    }
-  ];
+  const [ongoingElections, setOngoingElections] = useState<Election[]>([]);
+  const [upcomingElections, setUpcomingElections] = useState<Election[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Mock ongoing elections
-  const ongoingElections = [
-    { 
-      id: 2, 
-      name: 'Mumbai Municipal Corporation Elections', 
-      date: '2024-08-25', 
-      status: 'Active',
-      description: 'Elections for the Municipal Corporation of Mumbai',
-      eligibleToVote: true,
-      endTime: '5:00 PM'
-    }
-  ];
+  const today = new Date();
 
-  // Mock user's voting history
+  useEffect(() => {
+    const fetchElections = async () => {
+      try {
+        const res = await fetch('/api/elections');
+        const data = await res.json();
+
+        const upcoming = [];
+        const ongoing = [];
+
+        for (const election of data) {
+          const electionDate = new Date(election.date);
+          if (election.status.toLowerCase() === 'active') {
+            ongoing.push(election);
+          } else if (electionDate > today) {
+            upcoming.push(election);
+          }
+        }
+
+        setOngoingElections(ongoing);
+        setUpcomingElections(upcoming);
+      } catch (err) {
+        console.error("Error fetching elections:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchElections();
+  }, []);
+
   const votingHistory = [
     { id: 1, election: 'Maharashtra Vidhan Sabha Elections', date: '2023-11-20', receipt: 'MHVS2023001234' },
     { id: 2, election: 'Lok Sabha Elections', date: '2022-05-15', receipt: 'LSGE2022005678' },
@@ -52,7 +68,7 @@ const VoterDashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Important Notice Card */}
+        {/* Important Notice */}
         <Card className="border-l-4 border-amber-500">
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center">
@@ -79,26 +95,22 @@ const VoterDashboard = () => {
                         {election.status}
                       </span>
                     </div>
-                    <CardDescription>Ends today at {election.endTime}</CardDescription>
+                    <CardDescription>Ends today at 5:00 PM</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <p className="text-sm text-gray-500 mb-4">{election.description}</p>
                     <div className="flex items-center text-sm">
                       <Calendar className="mr-2 h-4 w-4 text-gray-500" />
-                      <span>Date: {election.date}</span>
+                      <span>Date: {new Date(election.date).toLocaleDateString()}</span>
                     </div>
                   </CardContent>
                   <CardFooter>
-                    {election.eligibleToVote ? (
-                      <Button className="w-full" asChild>
-                        <Link to="/voter/elections">
-                          <Vote className="mr-2 h-4 w-4" />
-                          Cast Your Vote
-                        </Link>
-                      </Button>
-                    ) : (
-                      <p className="text-sm text-gray-500">You are not eligible to vote in this election.</p>
-                    )}
+                    <Button className="w-full" asChild>
+                      <Link to="/voter/elections">
+                        <Vote className="mr-2 h-4 w-4" />
+                        Cast Your Vote
+                      </Link>
+                    </Button>
                   </CardFooter>
                 </Card>
               ))}
@@ -107,37 +119,35 @@ const VoterDashboard = () => {
         )}
 
         {/* Upcoming Elections */}
-        <div className="space-y-4">
-          <h2 className="text-xl font-bold text-gray-800">Upcoming Elections</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {upcomingElections.map((election) => (
-              <Card key={election.id}>
-                <CardHeader>
-                  <div className="flex justify-between items-start">
-                    <CardTitle>{election.name}</CardTitle>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                      {election.status}
-                    </span>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-gray-500 mb-4">{election.description}</p>
-                  <div className="flex items-center text-sm">
-                    <Calendar className="mr-2 h-4 w-4 text-gray-500" />
-                    <span>Date: {election.date}</span>
-                  </div>
-                </CardContent>
-                <CardFooter>
-                  {election.eligibleToVote ? (
+        {upcomingElections.length > 0 && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-bold text-gray-800">Upcoming Elections</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {upcomingElections.map((election) => (
+                <Card key={election.id}>
+                  <CardHeader>
+                    <div className="flex justify-between items-start">
+                      <CardTitle>{election.name}</CardTitle>
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        {election.status}
+                      </span>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-gray-500 mb-4">{election.description}</p>
+                    <div className="flex items-center text-sm">
+                      <Calendar className="mr-2 h-4 w-4 text-gray-500" />
+                      <span>Date: {new Date(election.date).toLocaleDateString()}</span>
+                    </div>
+                  </CardContent>
+                  <CardFooter>
                     <p className="text-sm text-gray-500">You will be able to vote when the election begins.</p>
-                  ) : (
-                    <p className="text-sm text-gray-500">You are not eligible to vote in this election.</p>
-                  )}
-                </CardFooter>
-              </Card>
-            ))}
+                  </CardFooter>
+                </Card>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Voting History */}
         <Card>

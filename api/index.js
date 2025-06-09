@@ -320,12 +320,12 @@ app.get('/api/admins', async (req, res) => {
           a.constituency_id,
           a.state_id,
           a.district_id,
-          vc.name AS constituency_name,
+          vc.name AS vidhansabha_constituencies_name,
           s.name AS state_name,
           d.name AS district_name
         FROM admins a
         JOIN users u ON a.user_id = u.id
-        LEFT JOIN vidhansabha_constituencies vc ON a.constituency_id = vc.id
+        LEFT JOIN vidhansabha_constituencies vc ON a.vidhansabha_constituencies_id = vc.id
         LEFT JOIN states s ON a.state_id = s.id
         LEFT JOIN districts d ON a.district_id = d.id
         ORDER BY u.name ASC
@@ -631,6 +631,42 @@ app.post('/api/voters', upload.single('photo'), async (req, res) => {
   }
 });
 
+
+// GET all voters
+app.get('/api/voters', async (req, res) => {
+  console.log("📥 GET request to /api/voters");
+
+  try {
+    const [voters] = await pool.query(`
+      SELECT 
+        v.id AS voter_id,
+        u.id AS user_id,
+        u.name,
+        u.email,
+        u.phone,
+        u.dob,
+        u.status,
+        u.photo_name,
+        v.voter_id AS voter_card_number,
+        v.state_id,
+        v.district_id,
+        v.loksabha_ward_id,
+        v.vidhansabha_ward_id,
+        v.municipal_corp_id,
+        v.municipal_corp_ward_id,
+        v.booth_id
+      FROM voters v
+      JOIN users u ON v.user_id = u.id
+      WHERE u.role_id = 3
+    `);
+
+    res.json(voters);
+  } catch (error) {
+    console.error("❌ Error fetching voters:", error);
+    res.status(500).json({ error: 'Failed to fetch voters', details: error.message });
+  }
+});
+
 // 10. Get admin by ID
 app.get('/api/admins/:id', async (req, res) => {
   const { id } = req.params;
@@ -719,6 +755,46 @@ app.post('/api/elections', async (req, res) => {
     });
   }
 });
+
+
+app.get('/api/elections', async (req, res) => {
+  try {
+    const elections = await query({
+      query: `
+        SELECT 
+          e.id, 
+          e.name, 
+          e.type, 
+          e.status, 
+          e.election_date AS date,
+          e.application_start_date AS applicationStartDate,
+          e.application_end_date AS applicationEndDate,
+          e.result_date AS resultDate,
+          e.state_id AS state,
+          e.district_id AS district,
+          e.loksabha_id AS loksabha,
+          e.vidhansabha_id AS vidhansabha,
+          e.local_body_id AS localBody,
+          e.description,
+          s.name AS stateName,
+          d.name AS districtName
+        FROM elections e
+        LEFT JOIN states s ON e.state_id = s.id
+        LEFT JOIN districts d ON e.district_id = d.id
+      `,
+      values: [] // No parameters needed
+    });
+
+    res.status(200).json(elections);
+  } catch (error) {
+    console.error('Error fetching elections:', error);
+    res.status(500).json({
+      error: 'Failed to fetch elections',
+      details: error.message
+    });
+  }
+});
+
 
 
 

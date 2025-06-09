@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import { Button } from '@/components/ui/button';
@@ -43,45 +42,35 @@ const Voters = () => {
   useEffect(() => {
     const fetchVoters = async () => {
       try {
-        // In a real app, you'd fetch from an API
-        // For now, let's use mock data
-        const mockVoters = [
-          {
-            id: "1",
-            name: "John Doe",
-            email: "john@example.com",
-            phone: "9876543210",
-            status: "active",
-            constituency: "Mumbai North",
-            state: "Maharashtra",
-            district: "Mumbai"
-          },
-          {
-            id: "2",
-            name: "Jane Smith",
-            email: "jane@example.com",
-            phone: "8765432109",
-            status: "inactive",
-            constituency: "Mumbai North",
-            state: "Maharashtra",
-            district: "Mumbai"
-          },
-          {
-            id: "3",
-            name: "Alex Johnson",
-            email: "alex@example.com",
-            phone: "7654321098",
-            status: "active",
-            constituency: "Mumbai North",
-            state: "Maharashtra",
-            district: "Mumbai"
-          }
-        ];
+        const response = await fetch('/api/voters');
+        if (!response.ok) {
+          throw new Error('Failed to fetch voters');
+        }
+        const data = await response.json();
         
-        // Filter voters by admin's constituency
-        const filteredByConstituency = user?.constituency 
-          ? mockVoters.filter(voter => voter.constituency === user.constituency)
-          : mockVoters;
+        // Transform the API data to match our expected format
+        const transformedVoters = data.map(voter => ({
+          id: voter.voter_id,
+          user_id: voter.user_id,
+          name: voter.name,
+          email: voter.email,
+          phone: voter.phone,
+          dob: voter.dob,
+          status: voter.status,
+          photo_name: voter.photo_name,
+          voter_card_number: voter.voter_card_number,
+          state_id: voter.state_id,
+          district_id: voter.district_id,
+          loksabha_ward_id: voter.loksabha_ward_id,
+          vidhansabha_ward_id: voter.vidhansabha_ward_id,
+          municipal_corp_id: voter.municipal_corp_id,
+          municipal_corp_ward_id: voter.municipal_corp_ward_id,
+          booth_id: voter.booth_id
+        }));
+        
+        // Filter voters by admin's constituency if needed
+        // (Assuming we might filter by some ward ID in the future)
+        const filteredByConstituency = transformedVoters;
           
         setVoters(filteredByConstituency);
         setFilteredVoters(filteredByConstituency);
@@ -105,7 +94,7 @@ const Voters = () => {
     const filtered = voters.filter(voter =>
       voter.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       voter.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      voter.constituency.toLowerCase().includes(searchQuery.toLowerCase())
+      voter.voter_card_number?.toLowerCase().includes(searchQuery.toLowerCase())
     );
     
     const sorted = [...filtered].sort((a, b) => {
@@ -135,36 +124,79 @@ const Voters = () => {
   };
   
   // Handle voter status toggle
-  const handleStatusToggle = (voter) => {
-    const updatedVoters = voters.map(v => {
-      if (v.id === voter.id) {
-        const newStatus = v.status === 'active' ? 'inactive' : 'active';
-        return { ...v, status: newStatus };
+  const handleStatusToggle = async (voter) => {
+    try {
+      const newStatus = voter.status === 'active' ? 'inactive' : 'active';
+      
+      // Update in the database first
+      const response = await fetch(`/api/users/${voter.user_id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to update status');
       }
-      return v;
-    });
-    
-    setVoters(updatedVoters);
-    
-    toast({
-      title: "Status Updated",
-      description: `${voter.name}'s status has been updated.`,
-    });
+      
+      // Then update local state
+      const updatedVoters = voters.map(v => {
+        if (v.id === voter.id) {
+          return { ...v, status: newStatus };
+        }
+        return v;
+      });
+      
+      setVoters(updatedVoters);
+      
+      toast({
+        title: "Status Updated",
+        description: `${voter.name}'s status has been updated to ${newStatus}.`,
+      });
+    } catch (error) {
+      console.error("Error updating status:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to update voter status",
+      });
+    }
   };
   
   // Handle delete
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!selectedVoter) return;
     
-    const updatedVoters = voters.filter(voter => voter.id !== selectedVoter.id);
-    setVoters(updatedVoters);
-    setIsDeleteDialogOpen(false);
-    setSelectedVoter(null);
-    
-    toast({
-      title: "Voter Deleted",
-      description: `${selectedVoter.name} has been removed from the system.`,
-    });
+    try {
+      // First delete from the database
+      const response = await fetch(`/api/voters/${selectedVoter.id}`, {
+        method: 'DELETE'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to delete voter');
+      }
+      
+      // Then update local state
+      const updatedVoters = voters.filter(voter => voter.id !== selectedVoter.id);
+      setVoters(updatedVoters);
+      setIsDeleteDialogOpen(false);
+      setSelectedVoter(null);
+      
+      toast({
+        title: "Voter Deleted",
+        description: `${selectedVoter.name} has been removed from the system.`,
+      });
+    } catch (error) {
+      console.error("Error deleting voter:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to delete voter",
+      });
+    }
   };
 
   // Send login credentials to voter
@@ -172,7 +204,6 @@ const Voters = () => {
     try {
       setEmailLoading(true);
       
-      // In a real app, this would call the API to send credentials
       await AuthService.sendLoginCredentials(
         voter.email,
         'tempPass123', // In real app would be generated
@@ -215,7 +246,7 @@ const Voters = () => {
             <div className="flex items-center pt-3">
               <Search className="mr-2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by name, email or constituency..."
+                placeholder="Search by name, email or voter ID..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="max-w-sm"
@@ -239,8 +270,8 @@ const Voters = () => {
                         Email {sortField === 'email' && (sortDirection === 'asc' ? '↑' : '↓')}
                       </TableHead>
                       <TableHead>Phone</TableHead>
-                      <TableHead className="cursor-pointer" onClick={() => handleSortToggle('constituency')}>
-                        Constituency {sortField === 'constituency' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      <TableHead className="cursor-pointer" onClick={() => handleSortToggle('voter_card_number')}>
+                        Voter ID {sortField === 'voter_card_number' && (sortDirection === 'asc' ? '↑' : '↓')}
                       </TableHead>
                       <TableHead className="cursor-pointer" onClick={() => handleSortToggle('status')}>
                         Status {sortField === 'status' && (sortDirection === 'asc' ? '↑' : '↓')}
@@ -261,7 +292,7 @@ const Voters = () => {
                           <TableCell>{voter.name}</TableCell>
                           <TableCell>{voter.email}</TableCell>
                           <TableCell>{voter.phone || 'N/A'}</TableCell>
-                          <TableCell>{voter.constituency}</TableCell>
+                          <TableCell>{voter.voter_card_number || 'N/A'}</TableCell>
                           <TableCell>
                             <Badge variant={voter.status === 'active' ? 'default' : 'outline'}>
                               {voter.status === 'active' ? 'Active' : 'Inactive'}
