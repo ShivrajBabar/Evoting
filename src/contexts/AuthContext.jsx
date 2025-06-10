@@ -61,50 +61,40 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
-  // Login function
+
   const login = async (email, password, role, electionType) => {
     setLoading(true);
     try {
-      console.log("Login attempt:", { email, role, electionType });
-      
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Find user in mock data (in production, this would be an API call)
-      const foundUser = mockUsers.find(u => 
-        u.email.toLowerCase() === email.toLowerCase() && u.role === role
-      );
-      
-      if (!foundUser) {
-        throw new Error('Invalid credentials');
+      const response = await fetch('http://localhost:3000/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password, role }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Login failed');
       }
 
-      // Check password (in production, this would be a proper password check)
-      if (foundUser.password !== password && password !== 'password123') {
-        throw new Error('Invalid password');
-      }
+      // For voter role, ensure electionType is included
+      const userData = role === 'voter'
+        ? { ...data.user, electionType }
+        : data.user;
 
-      // For voter role, check if election type is provided
-      if (role === 'voter' && !electionType) {
-        throw new Error('Election type is required for voters');
-      }
+      // Save to localStorage and context
+      localStorage.setItem('user', JSON.stringify(userData));
+      setUser(userData);
 
-      // Update user data with election type if voter
-      const userData = role === 'voter' 
-        ? { ...foundUser, electionType } 
-        : foundUser;
-      
-      // Remove the password before storing
-      const { password: _, ...userDataWithoutPassword } = userData;
-      
-      // Store user in localStorage and state
-      localStorage.setItem('user', JSON.stringify(userDataWithoutPassword));
-      setUser(userDataWithoutPassword);
-      
-      console.log("User authenticated:", userDataWithoutPassword);
-      
-      // Navigate based on role
-      switch (role) {
+      toast({
+        title: "Login successful",
+        description: `Welcome back, ${userData.name}`,
+      });
+
+      // Redirect based on role
+      switch (role?.toLowerCase()) {
         case 'superadmin':
           navigate('/superadmin/dashboard');
           break;
@@ -117,17 +107,14 @@ export const AuthProvider = ({ children }) => {
         default:
           navigate('/');
       }
-      
-      toast({
-        title: "Login successful",
-        description: `Welcome back, ${userDataWithoutPassword.name}`,
-      });
-      return userDataWithoutPassword;
+
+      return userData;
+
     } catch (error) {
       console.error('Login error:', error);
       toast({
         title: "Login failed",
-        description: error instanceof Error ? error.message : "An unknown error occurred",
+        description: error.message || 'An unknown error occurred',
         variant: "destructive",
       });
       throw error;
@@ -136,18 +123,19 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+
   // Reset password function
   const resetPassword = async (email, role) => {
     setLoading(true);
     try {
       // Simulate API call delay
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
+
       // Find user in mock data
-      const foundUser = mockUsers.find(u => 
+      const foundUser = mockUsers.find(u =>
         u.email.toLowerCase() === email.toLowerCase() && u.role === role
       );
-      
+
       if (!foundUser) {
         // For security, don't tell the user that the email doesn't exist
         console.log(`User not found: ${email} with role ${role}, but returning success for security`);
@@ -156,12 +144,12 @@ export const AuthProvider = ({ children }) => {
 
       // Simulate password reset email
       console.log(`Password reset requested for ${email} with role ${role}`);
-      
+
       toast({
         title: "Password reset initiated",
         description: `A password reset link has been sent to ${email}`,
       });
-      
+
       return true;
     } catch (error) {
       console.error('Password reset error:', error);

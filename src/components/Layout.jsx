@@ -39,7 +39,7 @@ const Layout = ({ children }) => {
 
   // Define navigation links based on user role
   const getNavLinks = () => {
-    switch (user.role) {
+    switch (user.role?.toLowerCase()) {
       case 'superadmin':
         return [
           { name: 'Dashboard', path: '/superadmin/dashboard', icon: <Home className="mr-2" size={18} /> },

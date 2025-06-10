@@ -860,6 +860,86 @@ app.get('/api/votes/counts', async (req, res) => {
   }
 });
 
+app.post('/api/login', async (req, res) => {
+  const { email, password, role } = req.body;
+
+  if (!email || !password || !role) {
+    return res.status(400).json({ error: 'Email, password, and role are required' });
+  }
+
+  try {
+    // 1. Static Super Admin Check
+    if (role.toLowerCase() === 'superadmin') {
+      const dummyEmail = 'superadmin@example.com';
+      const dummyPasswordHash = await bcrypt.hash('password123', 10); 
+
+      const isEmailMatch = email.toLowerCase() === dummyEmail;
+      const isPasswordMatch = await bcrypt.compare(password, dummyPasswordHash);
+
+      if (!isEmailMatch || !isPasswordMatch) {
+        return res.status(401).json({ error: 'Invalid superadmin credentials' });
+      }
+
+      return res.status(200).json({
+        message: 'Login successful',
+        user: {
+          id: 0,
+          name: 'Super Admin',
+          email: dummyEmail,
+          phone: 'N/A',
+          role: 'superadmin',
+          photo: null
+        }
+      });
+    }
+
+    // 2. Voter/Admin DB Login
+    const [user] = await pool.query(
+      `
+      SELECT u.id, u.name, u.email, u.phone, u.password, u.photo_name, r.role_name AS role_name
+      FROM users u
+      JOIN roles r ON u.role_id = r.id
+      WHERE u.email = ?
+      LIMIT 1
+      `,
+      [email]
+    );
+
+    if (!user || user.length === 0) {
+      return res.status(404).json({ error: 'Invalid email or password' });
+    }
+
+    const foundUser = user[0];
+
+    if (foundUser.role_name.toLowerCase() !== role.toLowerCase()) {
+      return res.status(403).json({ error: `Access denied for role: ${role}` });
+    }
+
+    const isMatch = await bcrypt.compare(password, foundUser.password);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    res.status(200).json({
+      message: 'Login successful',
+      user: {
+        id: foundUser.id,
+        name: foundUser.name,
+        email: foundUser.email,
+        phone: foundUser.phone,
+        role: foundUser.role_name,
+        photo: foundUser.photo_name
+          ? `http://localhost:${PORT}/uploads/photos/${foundUser.photo_name}`
+          : null,
+      }
+    });
+
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
 
 
 

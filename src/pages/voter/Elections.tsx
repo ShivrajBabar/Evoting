@@ -7,7 +7,9 @@ import { Calendar, Vote, AlertCircle, Check, Info } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
 const VoterElections = () => {
-  const { user } = useAuth();
+  // const { user } = useAuth();
+  const user =  JSON.parse(localStorage.getItem("user"));
+  console.log(user)
   const { toast } = useToast();
 
   const [elections, setElections] = useState<any[]>([]);
@@ -58,7 +60,7 @@ const VoterElections = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          voter_id: user.id,
+          voter_id: user?.id,
           candidate_id: candidateId,
           election_id: electionId
         })

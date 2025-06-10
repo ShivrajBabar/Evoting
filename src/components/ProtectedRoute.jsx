@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -6,20 +5,23 @@ import LoadingSpinner from '@/components/common/LoadingSpinner';
 
 const ProtectedRoute = ({ requiredRole, children }) => {
   const { user, isAuthenticated, loading } = useAuth();
-  
-  // If auth is still loading, show loading spinner
+
+  // Wait until AuthContext has loaded
   if (loading) {
     return <LoadingSpinner />;
   }
-  
-  // If not authenticated, redirect to login
+
+  // Not logged in
   if (!isAuthenticated || !user) {
     return <Navigate to="/login" replace />;
   }
-  
-  // If role doesn't match, redirect to appropriate dashboard
-  if (requiredRole && user.role !== requiredRole) {
-    switch (user.role) {
+
+  // Logged in but wrong role (case-insensitive)
+  if (
+    requiredRole &&
+    user.role?.toLowerCase() !== requiredRole.toLowerCase()
+  ) {
+    switch (user.role.toLowerCase()) {
       case 'superadmin':
         return <Navigate to="/superadmin/dashboard" replace />;
       case 'admin':
@@ -30,8 +32,8 @@ const ProtectedRoute = ({ requiredRole, children }) => {
         return <Navigate to="/login" replace />;
     }
   }
-  
-  // If authorized, render the children
+
+  // All good
   return children;
 };
 
