@@ -376,7 +376,7 @@ app.post('/api/candidates', upload.fields([
           education, education_photo, religion, cast, cast_no, cast_photo,
           non_crime_no, non_crime_photo, party, party_logo, photo, signature,
           amount, method, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Approved')
       `,
       values: [
         safe(name), safe(email), safe(aadhar), safe(phone), safe(dob), safe(district_id), safe(state_id), safe(loksabha_id),
@@ -386,7 +386,6 @@ app.post('/api/candidates', upload.fields([
         safe(non_crime_no), safe(getFile('non_crime_photo')), safe(party), safe(getFile('party_logo')), safe(getFile('photo')), safe(getFile('signature')),
         safe(amount), safe(method)
       ]
-
     });
 
     res.status(201).json({ message: 'Candidate registered successfully', candidateId: result.insertId });
@@ -395,6 +394,7 @@ app.post('/api/candidates', upload.fields([
     res.status(500).json({ error: 'Failed to register candidate', details: error.message });
   }
 });
+
 
 
 // Get all candidates
@@ -428,6 +428,7 @@ app.get('/api/candidates', async (req, res) => {
       photo: getFileUrl(candidate.photo),
       party_logo: getFileUrl(candidate.party_logo),
       election: candidate.election_name || 'Unknown Election',
+      election_id: candidate.election_id, // ✅ Added election_id
       constituency: candidate.constituency_name || 'Unknown Constituency'
     }));
 
@@ -440,6 +441,7 @@ app.get('/api/candidates', async (req, res) => {
     });
   }
 });
+
 
 
 // Get single candidate by ID
@@ -794,6 +796,70 @@ app.get('/api/elections', async (req, res) => {
     });
   }
 });
+
+
+app.post('/api/votes', async (req, res) => {
+  const { voter_id, candidate_id, election_id } = req.body;
+
+  if (!voter_id || !candidate_id || !election_id) {
+    return res.status(400).json({ error: 'voter_id, candidate_id, and election_id are required' });
+  }
+
+  try {
+    // Check if voter already voted in this election
+    const existingVote = await query({
+      query: `SELECT id FROM votes WHERE voter_id = ? AND election_id = ?`,
+      values: [voter_id, election_id]
+    });
+
+    if (existingVote.length > 0) {
+      return res.status(400).json({ error: 'Voter has already voted in this election' });
+    }
+
+    // Record the vote
+    await query({
+      query: `INSERT INTO votes (voter_id, candidate_id, election_id, vote_date) VALUES (?, ?, ?, NOW())`,
+      values: [voter_id, candidate_id, election_id]
+    });
+
+    res.status(201).json({ message: 'Vote recorded successfully' });
+  } catch (error) {
+    console.error('Error recording vote:', error);
+    res.status(500).json({ error: 'Failed to record vote', details: error.message });
+  }
+});
+
+app.get('/api/votes/counts', async (req, res) => {
+  const { election_id } = req.query;
+
+  if (!election_id) {
+    return res.status(400).json({ error: 'election_id is required' });
+  }
+
+  try {
+    const results = await query({
+      query: `
+        SELECT 
+          c.id AS candidate_id,
+          c.name AS candidate_name,
+          c.party,
+          COUNT(v.id) AS vote_count
+        FROM candidates c
+        LEFT JOIN votes v ON c.id = v.candidate_id AND v.election_id = ?
+        WHERE c.election_id = ?
+        GROUP BY c.id, c.name, c.party
+        ORDER BY vote_count DESC
+      `,
+      values: [election_id, election_id]
+    });
+
+    res.status(200).json(results);
+  } catch (error) {
+    console.error('Error fetching vote counts:', error);
+    res.status(500).json({ error: 'Failed to fetch vote counts', details: error.message });
+  }
+});
+
 
 
 

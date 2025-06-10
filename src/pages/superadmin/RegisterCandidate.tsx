@@ -71,6 +71,8 @@ const RegisterCandidate = () => {
   const [localbodies, setLocalbodies] = useState<Option[]>([]);
   const [wards, setWards] = useState<Option[]>([]);
   const [booths, setBooths] = useState<Option[]>([]);
+  const [elections, setElections] = useState<Option[]>([]);
+
 
 
   useEffect(() => {
@@ -81,6 +83,26 @@ const RegisterCandidate = () => {
     };
     fetchStates();
   }, []);
+
+  useEffect(() => {
+    const fetchElections = async () => {
+      try {
+        const res = await fetch('http://localhost:3000/api/elections');
+        const data = await res.json();
+        setElections(
+          data.map((e: any) => ({
+            value: e.id.toString(),
+            label: `${e.name} (${e.type}) - ${new Date(e.date).toLocaleDateString()}`,
+          }))
+        );
+      } catch (error) {
+        console.error('Error fetching elections:', error);
+      }
+    };
+
+    fetchElections();
+  }, []);
+
 
 
 
@@ -200,7 +222,6 @@ const RegisterCandidate = () => {
     setBooths(data.map((b: any) => ({ value: b.id.toString(), label: b.name })));
   };
 
-  const elections = ["Lok Sabha Elections 2025", "Vidhan Sabha Elections 2024", "Municipal Elections 2024"];
   const parties = ["Democratic Party", "Progressive Alliance", "National Front", "People's Party"];
 
   function onSubmit(values: z.infer<typeof formSchema>) {
@@ -582,7 +603,7 @@ const RegisterCandidate = () => {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Election*</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} defaultValue={field.value} disabled={elections.length === 0}>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select election" />
@@ -590,7 +611,9 @@ const RegisterCandidate = () => {
                           </FormControl>
                           <SelectContent>
                             {elections.map((election) => (
-                              <SelectItem key={election} value={election}>{election}</SelectItem>
+                              <SelectItem key={election.value} value={election.value}>
+                                {election.label}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -598,6 +621,7 @@ const RegisterCandidate = () => {
                       </FormItem>
                     )}
                   />
+
 
                   <FormField
                     control={form.control}
