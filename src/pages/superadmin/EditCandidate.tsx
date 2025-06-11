@@ -48,6 +48,15 @@ interface Candidate {
   amount?: string;
   method?: string;
   election?: string;
+
+  photo?: string;
+  signature?: string;
+  income_photo?: string;
+  nationality_photo?: string;
+  education_photo?: string;
+  cast_photo?: string;
+  non_crime_photo?: string;
+  party_logo?: string;
 }
 
 const formSchema = z.object({
@@ -102,6 +111,28 @@ const EditCandidate = () => {
   const [localbodies, setLocalbodies] = useState<Option[]>([]);
   const [wards, setWards] = useState<Option[]>([]);
   const [booths, setBooths] = useState<Option[]>([]);
+  const [electionsList, setElectionsList] = useState<Option[]>([]);
+
+  const [fileInputs, setFileInputs] = useState<{
+    photo: File | null;
+    signature: File | null;
+    income_photo: File | null;
+    nationality_photo: File | null;
+    education_photo: File | null;
+    cast_photo: File | null;
+    non_crime_photo: File | null;
+    party_logo: File | null;
+  }>({
+    photo: null,
+    signature: null,
+    income_photo: null,
+    nationality_photo: null,
+    education_photo: null,
+    cast_photo: null,
+    non_crime_photo: null,
+    party_logo: null,
+  });
+
 
   // Initialize form
   const form = useForm<z.infer<typeof formSchema>>({
@@ -152,7 +183,7 @@ const EditCandidate = () => {
           email: data.email,
           phone: data.phone,
           aadhar: data.aadhar,
-          dob: data.dob,
+          dob: data.dob?.split("T")[0] || "",
           state: data.state_id?.toString(),
           district: data.district_id?.toString(),
           loksabha: data.loksabha_id?.toString(),
@@ -171,7 +202,7 @@ const EditCandidate = () => {
           cast_no: data.cast_no,
           non_crime_no: data.non_crime_no,
           party: data.party,
-          amount: data.amount,
+          amount: data.amount?.toString() || "",
           method: data.method,
         });
 
@@ -193,6 +224,20 @@ const EditCandidate = () => {
         setStates(data.map((s: any) => ({ value: s.id.toString(), label: s.name })));
       };
       fetchStates();
+      await fetchElections();
+    };
+
+    const fetchElections = async () => {
+      try {
+        const res = await fetch('http://localhost:3000/api/elections');
+        const data = await res.json();
+        setElectionsList(data.map((e: any) => ({
+          value: e.id.toString(),
+          label: e.name,
+        })));
+      } catch (error) {
+        console.error('Error fetching elections:', error);
+      }
     };
 
     const fetchDependentData = async (data) => {
@@ -211,8 +256,41 @@ const EditCandidate = () => {
           setDistricts(districtsData.map(d => ({ value: d.id.toString(), label: d.name })));
         }
 
-        // Similarly fetch other dependent data (loksabha, vidhansabha, etc.)
-        // ... (implement similar logic for other dropdowns)
+        // Lok Sabha
+        if (data.state_id) {
+          const loksabhaRes = await fetch(`/api/constituencies?state_id=${data.state_id}&type=loksabha`);
+          const loksabhaData = await loksabhaRes.json();
+          setLoksabhas(loksabhaData.map((c: any) => ({ value: c.id.toString(), label: c.name })));
+        }
+
+        // Vidhan Sabha
+        if (data.district_id) {
+          const vidhansabhaRes = await fetch(`/api/constituencies?district_id=${data.district_id}&type=vidhansabha`);
+          const vidhansabhaData = await vidhansabhaRes.json();
+          setVidhansabhas(vidhansabhaData.map((c: any) => ({ value: c.id.toString(), label: c.name })));
+        }
+
+        // Local Bodies
+        if (data.district_id) {
+          const localbodyRes = await fetch(`/api/local-bodies?district_id=${data.district_id}`);
+          const localbodyData = await localbodyRes.json();
+          setLocalbodies(localbodyData.map((lb: any) => ({ value: lb.id.toString(), label: lb.name })));
+        }
+
+        // Wards
+        if (data.local_body_id) {
+          const wardRes = await fetch(`/api/wards?local_body_id=${data.local_body_id}`);
+          const wardData = await wardRes.json();
+          setWards(wardData.map((w: any) => ({ value: w.id.toString(), label: w.name })));
+        }
+
+        // Booths
+        if (data.ward_id) {
+          const boothRes = await fetch(`/api/booths?ward_id=${data.ward_id}`);
+          const boothData = await boothRes.json();
+          setBooths(boothData.map((b: any) => ({ value: b.id.toString(), label: b.name })));
+        }
+
 
       } catch (error) {
         console.error('Error fetching dependent data:', error);
@@ -300,7 +378,6 @@ const EditCandidate = () => {
     setBooths(data.map((b: any) => ({ value: b.id.toString(), label: b.name })));
   };
 
-  const elections = ["Lok Sabha Elections 2025", "Vidhan Sabha Elections 2024", "Municipal Elections 2024"];
   const parties = ["Democratic Party", "Progressive Alliance", "National Front", "People's Party"];
 
 
@@ -325,17 +402,59 @@ const EditCandidate = () => {
   }
 
 
-  // ... (keep your existing handler functions)
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    try {
+      const formData = new FormData();
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    // Update candidate logic here
-    console.log('Updating candidate with:', values);
-    toast({
-      title: "Candidate Updated",
-      description: `${values.name}'s information has been updated successfully.`,
-    });
-    navigate('/superadmin/candidates');
-  }
+      // Append all form values
+      Object.entries(values).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          formData.append(key, value.toString());
+        }
+      });
+
+      // Append all files that have been selected for upload
+      Object.entries(fileInputs).forEach(([key, file]) => {
+        if (file) {
+          formData.append(key, file);
+        }
+      });
+
+      const res = await fetch(`/api/candidates/${id}`, {
+        method: "PUT",
+        body: formData,
+        // Don't set Content-Type header - let the browser set it with the correct boundary
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to update candidate");
+      }
+
+      toast({
+        title: "Success",
+        description: "Candidate updated successfully.",
+      });
+
+      navigate("/superadmin/candidates");
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+      console.error("Update error:", error);
+    }
+  };
+
+  const handleFileChange = (field: keyof typeof fileInputs) => (e: React.ChangeEvent<HTMLInputElement>) => {
+  setFileInputs(prev => ({
+    ...prev,
+    [field]: e.target.files?.[0] || null
+  }));
+};
+
+
 
   return (
     <Layout>
@@ -349,7 +468,7 @@ const EditCandidate = () => {
           <CardHeader>
             <div className="flex items-center space-x-4">
               <Avatar className="h-20 w-20">
-                <AvatarImage src="/placeholder.svg" alt={candidateData?.name || ''} />
+                <AvatarImage src={candidateData?.photo || "/placeholder.svg"} alt={candidateData?.name || ''} />
                 <AvatarFallback>{(candidateData?.name || '').substring(0, 2).toUpperCase()}</AvatarFallback>
               </Avatar>
               <div>
@@ -439,9 +558,13 @@ const EditCandidate = () => {
                       <FormItem>
                         <FormLabel>State*</FormLabel>
                         <Select
-                          onValueChange={(value) => handleStateChange(value)}
-                          defaultValue={field.value}
+                          value={field.value}
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            handleStateChange(value);
+                          }}
                         >
+
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select state" />
@@ -468,9 +591,11 @@ const EditCandidate = () => {
                       <FormItem>
                         <FormLabel>District*</FormLabel>
                         <Select
-                          onValueChange={(value) => handleDistrictChange(value)}
-                          defaultValue={field.value}
-                          disabled={districts.length === 0}
+                          value={field.value}
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            handleDistrictChange(value);
+                          }}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -498,9 +623,11 @@ const EditCandidate = () => {
                       <FormItem>
                         <FormLabel>Lok Sabha Constituency*</FormLabel>
                         <Select
-                          onValueChange={(value) => handleLoksabhaChange(value)}
-                          defaultValue={field.value}
-                          disabled={loksabhas.length === 0}
+                          value={field.value}
+                          onValueChange={(value) => {
+                            field.onChange(value);          // ✅ update form state
+                            handleLoksabhaChange(value);    // ✅ your custom logic
+                          }}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -528,9 +655,11 @@ const EditCandidate = () => {
                       <FormItem>
                         <FormLabel>Vidhan Sabha Constituency*</FormLabel>
                         <Select
-                          onValueChange={(value) => handleVidhansabhaChange(value)}
-                          defaultValue={field.value}
-                          disabled={vidhansabhas.length === 0}
+                          value={field.value}
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            handleVidhansabhaChange(value);
+                          }}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -557,9 +686,11 @@ const EditCandidate = () => {
                       <FormItem>
                         <FormLabel>Local Body*</FormLabel>
                         <Select
-                          onValueChange={(value) => handleLocalbodyChange(value)}
-                          defaultValue={field.value}
-                          disabled={localbodies.length === 0}
+                          value={field.value}
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            handleLocalbodyChange(value);
+                          }}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -586,9 +717,11 @@ const EditCandidate = () => {
                       <FormItem>
                         <FormLabel>Ward*</FormLabel>
                         <Select
-                          onValueChange={(value) => handleWardChange(value)}
-                          defaultValue={field.value}
-                          disabled={wards.length === 0}
+                          value={field.value}
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            handleWardChange(value);
+                          }}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -615,10 +748,10 @@ const EditCandidate = () => {
                       <FormItem>
                         <FormLabel>Booth*</FormLabel>
                         <Select
-                          onValueChange={(value) => field.onChange(value)}
-                          defaultValue={field.value}
-                          disabled={booths.length === 0}
+                          value={field.value}
+                          onValueChange={field.onChange}
                         >
+
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select booth" />
@@ -643,15 +776,20 @@ const EditCandidate = () => {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Election*</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select
+                          value={field.value}
+                          onValueChange={field.onChange}
+                        >
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select election" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {elections.map((election) => (
-                              <SelectItem key={election} value={election}>{election}</SelectItem>
+                            {electionsList.map((e) => (
+                              <SelectItem key={e.value} value={e.value}>
+                                {e.label}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -659,6 +797,7 @@ const EditCandidate = () => {
                       </FormItem>
                     )}
                   />
+
 
                   <FormField
                     control={form.control}
@@ -823,40 +962,74 @@ const EditCandidate = () => {
                 <div className="pt-4">
                   <h3 className="font-semibold mb-2">Update Documents</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
                     <div>
                       <FormLabel>Candidate Photo</FormLabel>
-                      <Input type="file" />
+                      {candidateData?.photo && (
+                        <img src={candidateData.photo} alt="Candidate Photo" className="w-24 h-24 object-cover mb-2 rounded" />
+                      )}
+                      <Input type="file" onChange={handleFileChange('photo')} />
                     </div>
+
                     <div>
                       <FormLabel>Signature</FormLabel>
-                      <Input type="file" />
+                      {candidateData?.signature && (
+                        <img src={candidateData.signature} alt="Signature" className="w-24 h-24 object-cover mb-2 rounded" />
+                      )}
+                      <Input type="file" onChange={handleFileChange('photo')} />
                     </div>
+
                     <div>
                       <FormLabel>Income Certificate</FormLabel>
-                      <Input type="file" />
+                      {candidateData?.income_photo && (
+                        <img src={candidateData.income_photo} alt="Income Certificate" className="w-24 h-24 object-cover mb-2 rounded" />
+                      )}
+                      <Input type="file" onChange={handleFileChange('photo')} />
                     </div>
+
                     <div>
                       <FormLabel>Nationality Certificate</FormLabel>
-                      <Input type="file" />
+                      {candidateData?.nationality_photo && (
+                        <img src={candidateData.nationality_photo} alt="Nationality Certificate" className="w-24 h-24 object-cover mb-2 rounded" />
+                      )}
+                      <Input type="file" onChange={handleFileChange('photo')} />
                     </div>
+
                     <div>
                       <FormLabel>Education Certificate</FormLabel>
-                      <Input type="file" />
+                      {candidateData?.education_photo && (
+                        <img src={candidateData.education_photo} alt="Education Certificate" className="w-24 h-24 object-cover mb-2 rounded" />
+                      )}
+                      <Input type="file" onChange={handleFileChange('photo')}/>
                     </div>
+
                     <div>
                       <FormLabel>Cast Certificate</FormLabel>
-                      <Input type="file" />
+                      {candidateData?.cast_photo && (
+                        <img src={candidateData.cast_photo} alt="Cast Certificate" className="w-24 h-24 object-cover mb-2 rounded" />
+                      )}
+                      <Input type="file" onChange={handleFileChange('photo')} />
                     </div>
+
                     <div>
                       <FormLabel>Non-Criminal Certificate</FormLabel>
-                      <Input type="file" />
+                      {candidateData?.non_crime_photo && (
+                        <img src={candidateData.non_crime_photo} alt="Non-Criminal Certificate" className="w-24 h-24 object-cover mb-2 rounded" />
+                      )}
+                      <Input type="file" onChange={handleFileChange('photo')} />
                     </div>
+
                     <div>
                       <FormLabel>Party Logo</FormLabel>
-                      <Input type="file" />
+                      {candidateData?.party_logo && (
+                        <img src={candidateData.party_logo} alt="Party Logo" className="w-24 h-24 object-cover mb-2 rounded" />
+                      )}
+                      <Input type="file" onChange={handleFileChange('photo')} />
                     </div>
+
                   </div>
                 </div>
+
 
                 <div className="flex justify-end space-x-4">
                   <Button type="button" variant="outline" onClick={() => navigate('/superadmin/candidates')}>

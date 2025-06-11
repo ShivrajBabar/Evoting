@@ -112,44 +112,41 @@ const Admins = () => {
 
   // Handle admin status toggle
   const handleStatusToggle = async (admin: Admin) => {
-    try {
-      const newStatus = admin.status.toLowerCase() === 'active' ? 'inactive' : 'active';
+  try {
+    const newStatus = admin.status.toLowerCase() === 'active' ? 'inactive' : 'active';
 
+    const response = await fetch(`http://localhost:3000/api/admins/${admin.id}/status`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ status: newStatus })
+    });
 
-      const response = await fetch(`http://localhost:3000/api/users/${admin.user_id}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ status: newStatus })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update status');
-      }
-
-      // Update local state
-      const updatedAdmins = admins.map(a => {
-        if (a.id === admin.id) {
-          return { ...a, status: newStatus };
-        }
-        return a;
-      });
-
-      setAdmins(updatedAdmins);
-
-      toast({
-        title: "Status Updated",
-        description: `${admin.name}'s status has been updated to ${newStatus}.`,
-      });
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message,
-      });
+    if (!response.ok) {
+      throw new Error('Failed to update status');
     }
-  };
+
+    const updatedAdmins = admins.map(a =>
+      a.id === admin.id ? { ...a, status: newStatus } : a
+    );
+
+    setAdmins(updatedAdmins);
+
+    toast({
+      title: "Status Updated",
+      description: `${admin.name}'s status has been updated to ${newStatus}.`,
+    });
+  } catch (error) {
+    toast({
+      variant: "destructive",
+      title: "Error",
+      description: error.message,
+    });
+  }
+};
+
+
 
   // Handle delete
   const handleDelete = async () => {

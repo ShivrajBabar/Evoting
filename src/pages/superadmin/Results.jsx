@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import Layout from '@/components/Layout';
 import { useAuth } from '@/contexts/AuthContext';
@@ -20,16 +19,18 @@ const SuperadminResults = () => {
   const { toast } = useToast();
   const [selectedElection, setSelectedElection] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedElectionId, setSelectedElectionId] = useState('');
 
-  // Fetch elections for the dropdown
+  // Fetch elections from API
   const {
     data: elections = [],
-    isLoading: electionsLoading
+    isLoading: electionsLoading,
+    error: electionsError,
+    refetch: refetchElections
   } = useQuery({
     queryKey: ['admin-elections'],
     queryFn: async () => {
       try {
-        // Fetch all elections
         const response = await ElectionService.getAllElections();
         return Array.isArray(response) ? response : [];
       } catch (error) {
@@ -53,120 +54,6 @@ const SuperadminResults = () => {
     queryKey: ['admin-results', selectedElection],
     queryFn: async () => {
       try {
-        // Mock data for demonstration purposes
-        const mockResults = [
-          {
-            id: 1,
-            election_id: 1,
-            election_name: "Lok Sabha Elections 2024",
-            election_type: "Lok Sabha",
-            constituency_id: 1,
-            constituency_name: "Mumbai North",
-            winner_id: 101,
-            winner_name: "Rahul Sharma",
-            winner_party: "National Democratic Party",
-            total_votes: 158745,
-            voter_turnout: 68.5,
-            published: true,
-            completed_date: "2024-03-20T15:30:00.000Z",
-            published_date: "2024-03-22T10:15:00.000Z",
-            candidates: [
-              {
-                id: 101,
-                name: "Rahul Sharma",
-                party: "National Democratic Party",
-                votes: 85420,
-                percentage: 53.8,
-                photo_url: "https://randomuser.me/api/portraits/men/32.jpg",
-                symbol_url: "/placeholder.svg"
-              },
-              {
-                id: 102,
-                name: "Priya Patel",
-                party: "Progressive Alliance",
-                votes: 65325,
-                percentage: 41.2,
-                photo_url: "https://randomuser.me/api/portraits/women/44.jpg",
-                symbol_url: "/placeholder.svg"
-              }
-            ]
-          },
-          {
-            id: 2,
-            election_id: 1,
-            election_name: "Lok Sabha Elections 2024",
-            election_type: "Lok Sabha",
-            constituency_id: 2,
-            constituency_name: "Delhi East",
-            winner_id: 201,
-            winner_name: "Sneha Gupta",
-            winner_party: "Progressive Alliance",
-            total_votes: 145230,
-            voter_turnout: 72.1,
-            published: false,
-            completed_date: "2024-03-20T16:45:00.000Z",
-            published_date: null,
-            candidates: [
-              {
-                id: 201,
-                name: "Sneha Gupta",
-                party: "Progressive Alliance",
-                votes: 78450,
-                percentage: 54.0,
-                photo_url: "https://randomuser.me/api/portraits/women/22.jpg",
-                symbol_url: "/placeholder.svg"
-              },
-              {
-                id: 202,
-                name: "Vikram Malhotra",
-                party: "National Democratic Party",
-                votes: 61780,
-                percentage: 42.5,
-                photo_url: "https://randomuser.me/api/portraits/men/54.jpg",
-                symbol_url: "/placeholder.svg"
-              }
-            ]
-          },
-          {
-            id: 3,
-            election_id: 2,
-            election_name: "Maharashtra Assembly Elections 2024",
-            election_type: "Vidhan Sabha",
-            constituency_id: 3,
-            constituency_name: "Pune Central",
-            winner_id: 301,
-            winner_name: "Anand Joshi",
-            winner_party: "Regional Front",
-            total_votes: 98560,
-            voter_turnout: 65.3,
-            published: true,
-            completed_date: "2024-02-15T14:20:00.000Z",
-            published_date: "2024-02-17T09:45:00.000Z",
-            candidates: [
-              {
-                id: 301,
-                name: "Anand Joshi",
-                party: "Regional Front",
-                votes: 45230,
-                percentage: 45.9,
-                photo_url: "https://randomuser.me/api/portraits/men/78.jpg",
-                symbol_url: "/placeholder.svg"
-              },
-              {
-                id: 302,
-                name: "Kavita Deshmukh",
-                party: "Progressive Alliance",
-                votes: 42330,
-                percentage: 43.0,
-                photo_url: "https://randomuser.me/api/portraits/women/67.jpg",
-                symbol_url: "/placeholder.svg"
-              }
-            ]
-          }
-        ];
-
-        // Try to get actual data from API, fallback to mock data
-        let actualData = [];
         const filters = {};
         if (selectedElection !== 'all') {
           const electionId = parseInt(selectedElection);
@@ -175,22 +62,8 @@ const SuperadminResults = () => {
           }
         }
 
-        try {
-          actualData = await ResultService.getAllResults(filters);
-          console.log("Actual results data:", actualData);
-
-          if (Array.isArray(actualData) && actualData.length > 0) {
-            return actualData;
-          } else {
-            console.log("Using mock results data");
-            return selectedElection === 'all' ? mockResults :
-              mockResults.filter(r => r.election_id.toString() === selectedElection);
-          }
-        } catch (error) {
-          console.log("API error, using mock data:", error);
-          return selectedElection === 'all' ? mockResults :
-            mockResults.filter(r => r.election_id.toString() === selectedElection);
-        }
+        const actualData = await ResultService.getAllResults(filters);
+        return Array.isArray(actualData) ? actualData : [];
       } catch (error) {
         console.error('Error fetching results:', error);
         toast({
@@ -204,10 +77,13 @@ const SuperadminResults = () => {
   });
 
   // Format election options for the dropdown
-  const electionOptions = Array.isArray(elections) ? elections.map((election) => ({
-    id: election.id.toString(),
-    name: election.name
-  })) : [];
+  const electionOptions = [
+    { id: 'all', name: 'All Elections' },
+    ...(Array.isArray(elections) ? elections.map((election) => ({
+      id: election.id.toString(),
+      name: election.name
+    })) : []
+    )];
 
   // Filter results based on search query
   const filteredResults = results.filter(result => {
@@ -225,13 +101,11 @@ const SuperadminResults = () => {
   const togglePublishStatus = async (resultId, currentPublishStatus) => {
     try {
       await ResultService.updateResult(resultId, { published: !currentPublishStatus });
-
       toast({
         title: "Success",
         description: currentPublishStatus ? "Result unpublished" : "Result published",
         variant: "default"
       });
-
       refetchResults();
     } catch (error) {
       console.error('Error toggling publish status:', error);
@@ -247,13 +121,11 @@ const SuperadminResults = () => {
   const deleteResult = async (resultId) => {
     try {
       await ResultService.deleteResult(resultId);
-
       toast({
         title: "Success",
         description: "Result deleted successfully",
         variant: "default"
       });
-
       refetchResults();
     } catch (error) {
       console.error('Error deleting result:', error);
@@ -265,10 +137,63 @@ const SuperadminResults = () => {
     }
   };
 
-  // Generate results for an election
-  const generateResults = async (electionId) => {
+  const generateResults = async () => {
+    if (!selectedElectionId) {
+      toast({
+        title: "Error",
+        description: "Please select an election",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // 🧠 Find selected election object
+    const selectedElection = elections.find(
+      e => e.id.toString() === selectedElectionId
+    );
+
+    if (!selectedElection) {
+      toast({
+        title: "Error",
+        description: "Election not found",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // ✅ Prepare payload
+    const payload = {
+      election_id: selectedElection.id,
+      election_name: selectedElection.name,
+      result_date: selectedElection.resultDate,
+      vidhansabha_id: selectedElection.vidhansabha,
+      loksabha_id: selectedElection.loksabha
+    };
+
+    console.log("📤 Sending JSON to backend:", payload);
+
     try {
-      await ResultService.generateResults(electionId);
+      const response = await fetch('http://localhost:3000/api/results/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const text = await response.text();
+      console.log("🔍 Raw API response:", text);
+
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error("Response was not valid JSON: " + text);
+      }
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to generate result");
+      }
 
       toast({
         title: "Success",
@@ -277,15 +202,20 @@ const SuperadminResults = () => {
       });
 
       refetchResults();
+
     } catch (error) {
-      console.error('Error generating results:', error);
+      console.error("❌ Error generating results:", error.message);
       toast({
         title: "Error",
-        description: "Failed to generate results",
+        description: error.message,
         variant: "destructive"
       });
     }
   };
+
+
+
+
 
   // Format date
   const formatDate = (dateString) => {
@@ -298,7 +228,34 @@ const SuperadminResults = () => {
     });
   };
 
-  if (resultsLoading) {
+  if (electionsError) {
+    return (
+      <Layout>
+        <div className="space-y-6">
+          <h1 className="text-3xl font-bold">Election Results</h1>
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center p-10 text-center">
+              <AlertTriangle className="h-8 w-8 mb-2 text-destructive" />
+              <h3 className="text-xl font-medium mb-1">Error Loading Elections</h3>
+              <p className="text-gray-500">
+                Failed to load election data. Please try again later.
+              </p>
+              <Button
+                variant="outline"
+                className="mt-4"
+                onClick={() => refetchElections()}
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Retry
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (resultsLoading || electionsLoading) {
     return (
       <Layout>
         <div className="space-y-6">
@@ -339,14 +296,14 @@ const SuperadminResults = () => {
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <div className="py-4">
-                  <Select>
+                  <Select onValueChange={setSelectedElectionId}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select an election" />
                     </SelectTrigger>
                     <SelectContent>
                       {elections.map(election => (
                         <SelectItem key={election.id} value={election.id.toString()}>
-                          {election.name}
+                          {election.name} ({election.type})
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -354,13 +311,14 @@ const SuperadminResults = () => {
                 </div>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => generateResults(1)}>Generate</AlertDialogAction>
+                  <AlertDialogAction onClick={generateResults}>
+                    Generate
+                  </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
           </div>
         </div>
-
 
         <Card>
           <CardHeader>
@@ -386,7 +344,6 @@ const SuperadminResults = () => {
                     <SelectValue placeholder="All Elections" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Elections</SelectItem>
                     {electionOptions.map(option => (
                       <SelectItem key={option.id} value={option.id}>
                         {option.name}
@@ -396,7 +353,6 @@ const SuperadminResults = () => {
                 </Select>
               </div>
             </div>
-
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="all">

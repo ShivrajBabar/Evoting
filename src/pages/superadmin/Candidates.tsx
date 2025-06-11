@@ -19,6 +19,18 @@ const SuperadminCandidates = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [candidates, setCandidates] = useState([]);
 
+  // Utility to calculate age
+  const calculateAge = (dob) => {
+    const birthDate = new Date(dob);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
   useEffect(() => {
     const fetchCandidates = async () => {
       try {
@@ -27,7 +39,13 @@ const SuperadminCandidates = () => {
           throw new Error('Failed to fetch candidates');
         }
         const data = await response.json();
-        setCandidates(data);
+
+        const mappedCandidates = data.map(candidate => ({
+          ...candidate,
+          age: calculateAge(candidate.dob),
+        }));
+
+        setCandidates(mappedCandidates);
       } catch (error) {
         toast({
           title: 'Error',
@@ -44,15 +62,15 @@ const SuperadminCandidates = () => {
     const matchesSearch = searchQuery === '' || 
       candidate.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
       candidate.party.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      candidate.constituency.toLowerCase().includes(searchQuery.toLowerCase());
+      candidate.constituency_name.toLowerCase().includes(searchQuery.toLowerCase());
     
-    const matchesElection = electionFilter === 'all' || candidate.election === electionFilter;
+    const matchesElection = electionFilter === 'all' || candidate.election_type === electionFilter;
     const matchesStatus = statusFilter === 'all' || candidate.status === statusFilter;
     
     return matchesSearch && matchesElection && matchesStatus;
   });
 
-  const elections = [...new Set(candidates.map(candidate => candidate.election))];
+  const elections = [...new Set(candidates.map(candidate => candidate.election_type))];
 
   const handleEditCandidate = (id) => {
     navigate(`/superadmin/candidates/edit/${id}`);
@@ -65,16 +83,41 @@ const SuperadminCandidates = () => {
     });
   };
 
-  const updateCandidateStatus = (id, newStatus) => {
-    setCandidates(candidates.map(candidate => 
-      candidate.id === id ? { ...candidate, status: newStatus } : candidate
-    ));
-    
+  
+
+  const updateCandidateStatus = async (id, newStatus) => {
+  try {
+    const res = await fetch(`/api/candidates/${id}/status`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ status: newStatus })
+    });
+
+    if (!res.ok) {
+      throw new Error('Failed to update status');
+    }
+
+    setCandidates(prev =>
+      prev.map(candidate =>
+        candidate.id === id ? { ...candidate, status: newStatus } : candidate
+      )
+    );
+
     toast({
       title: "Status Updated",
       description: `Candidate status changed to ${newStatus}`,
     });
-  };
+  } catch (error) {
+    toast({
+      title: "Error",
+      description: error.message,
+      variant: 'destructive',
+    });
+  }
+};
+
 
   return (
     <Layout>
@@ -153,8 +196,8 @@ const SuperadminCandidates = () => {
                       <td className="px-6 py-4 font-medium">{candidate.name}</td>
                       <td className="px-6 py-4">{candidate.party}</td>
                       <td className="px-6 py-4">{candidate.age}</td>
-                      <td className="px-6 py-4">{candidate.constituency}</td>
-                      <td className="px-6 py-4">{candidate.election}</td>
+                      <td className="px-6 py-4">{candidate.constituency_name}</td>
+                      <td className="px-6 py-4">{candidate.election_type}</td>
                       <td className="px-6 py-4">
                         <Popover>
                           <PopoverTrigger asChild>

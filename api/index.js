@@ -186,24 +186,7 @@ app.get('/api/booths', async (req, res) => {
   }
 });
 
-// 7. Get Admins
-app.get('/api/admins', async (req, res) => {
-  try {
-    const admins = await query({
-      query: `
-        SELECT a.*, u.name, u.email, u.phone, s.name as state_name, d.name as district_name
-        FROM admins a
-        JOIN users u ON a.user_id = u.id
-        JOIN states s ON a.state_id = s.id
-        JOIN districts d ON a.district_id = d.id
-      `
-    });
-    res.status(200).json(admins);
-  } catch (error) {
-    console.error('Error fetching admins:', error);
-    res.status(500).json({ error: 'Failed to fetch admins' });
-  }
-});
+
 
 // 8. Create Admin
 app.post('/api/admins', upload.single('photo'), async (req, res) => {
@@ -310,25 +293,25 @@ app.get('/api/admins', async (req, res) => {
     const admins = await query({
       query: `
         SELECT 
-          u.id,
-          u.role_id,
-          u.name,
-          u.email,
-          u.phone,
-          u.dob,
-          u.status,
-          a.constituency_id,
-          a.state_id,
-          a.district_id,
-          vc.name AS vidhansabha_constituencies_name,
-          s.name AS state_name,
-          d.name AS district_name
-        FROM admins a
-        JOIN users u ON a.user_id = u.id
-        LEFT JOIN vidhansabha_constituencies vc ON a.vidhansabha_constituencies_id = vc.id
-        LEFT JOIN states s ON a.state_id = s.id
-        LEFT JOIN districts d ON a.district_id = d.id
-        ORDER BY u.name ASC
+            u.id,
+            u.role_id,
+            u.name,
+            u.email,
+            u.phone,
+            u.dob,
+            u.status,
+            a.constituency_id,
+            a.state_id,
+            a.district_id,
+            vc.name AS constituency,
+            s.name AS state_name,
+            d.name AS district_name
+            FROM admins a
+            JOIN users u ON a.user_id = u.id
+            LEFT JOIN vidhansabha_constituencies vc ON a.constituency_id = vc.id
+            LEFT JOIN states s ON a.state_id = s.id
+            LEFT JOIN districts d ON a.district_id = d.id
+            ORDER BY u.name ASC;
       `
     });
 
@@ -338,6 +321,49 @@ app.get('/api/admins', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch admins' });
   }
 });
+
+
+// PATCH /api/admins/:id/status
+app.patch('/api/admins/:id/status', async (req, res) => {
+  const userId = req.params.id; // Get id from URL params
+  const { status } = req.body;
+
+  console.log('➡️ PATCH /api/admins/:id/status');
+  console.log('🧾 userId:', userId);
+  console.log('🟢 Requested new status:', status);
+
+  // Validate status
+  const validStatuses = ['active', 'inactive', 'suspended'];
+  if (!validStatuses.includes(status)) {
+    console.warn('⚠️ Invalid status:', status);
+    return res.status(400).json({ error: 'Invalid status value' });
+  }
+
+  try {
+    // Check if user exists
+    const [existingUser] = await pool.query('SELECT id FROM users WHERE id = ?', [userId]);
+    console.log('📦 Existing user lookup result:', existingUser);
+
+    if (!existingUser || existingUser.length === 0) {
+      console.warn('❌ User not found for ID:', userId);
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Update status
+    const [updateResult] = await pool.query('UPDATE users SET status = ? WHERE id = ?', [status, userId]);
+    console.log('✅ Status update result:', updateResult);
+
+    res.json({ message: `User status updated to ${status}` });
+  } catch (error) {
+    console.error('❌ Error updating user status:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+
+
+
+
 
 const safe = (value) => {
   return value === undefined || value === null || value === '' ? null : value;
@@ -505,6 +531,31 @@ app.get('/api/candidates/:id', async (req, res) => {
       error: 'Failed to fetch candidate',
       details: error.message
     });
+  }
+});
+
+app.patch('/api/candidates/:id/status', async (req, res) => {
+  const candidateId = req.params.id;
+  const { status } = req.body;
+
+  if (!['Approved', 'Pending', 'Rejected'].includes(status)) {
+    return res.status(400).json({ error: 'Invalid status value' });
+  }
+
+  try {
+    const result = await query({
+      query: `UPDATE candidates SET status = ? WHERE id = ?`,
+      values: [status, candidateId]
+    });
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Candidate not found' });
+    }
+
+    res.status(200).json({ message: 'Status updated successfully' });
+  } catch (error) {
+    console.error('Error updating candidate status:', error);
+    res.status(500).json({ error: 'Failed to update status', details: error.message });
   }
 });
 
@@ -801,10 +852,12 @@ app.post('/api/elections', async (req, res) => {
     }
 
     const result = await query({
-      query: `INSERT INTO elections 
-    (name, type, status, election_date, application_start_date, application_end_date, 
-     result_date, state_id, district_id, loksabha_id, vidhansabha_id, local_body_id, description)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      query: `
+        INSERT INTO elections 
+          (name, type, status, election_date, application_start_date, application_end_date, 
+           result_date, state_id, district_id, loksabha_id, vidhansabha_id, local_body_id, 
+           description, result)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       values: [
         req.body.name,
         req.body.type,
@@ -818,10 +871,10 @@ app.post('/api/elections', async (req, res) => {
         req.body.loksabha || null,
         req.body.vidhansabha || null,
         req.body.localBody || null,
-        req.body.description || null
+        req.body.description || null,
+        "No"  // ✅ Set default value for result
       ]
     });
-
 
     res.status(201).json({ message: 'Election created successfully', id: result.insertId });
   } catch (error) {
@@ -832,6 +885,7 @@ app.post('/api/elections', async (req, res) => {
     });
   }
 });
+
 
 
 app.get('/api/elections', async (req, res) => {
@@ -853,6 +907,7 @@ app.get('/api/elections', async (req, res) => {
           e.vidhansabha_id AS vidhansabha,
           e.local_body_id AS localBody,
           e.description,
+          e.result,
           s.name AS stateName,
           d.name AS districtName
         FROM elections e
@@ -933,6 +988,92 @@ app.post('/api/votes', async (req, res) => {
     res.status(500).json({ error: 'Failed to record vote', details: error.message });
   }
 });
+
+app.put('/api/candidates/:id', upload.fields([
+  { name: 'photo' },
+  { name: 'signature' },
+  { name: 'income_photo' },
+  { name: 'nationality_photo' },
+  { name: 'education_photo' },
+  { name: 'cast_photo' },
+  { name: 'non_crime_photo' },
+  { name: 'party_logo' },
+]), async (req, res) => {
+  const candidateId = req.params.id;
+
+  try {
+    const {
+      name, email, aadhar, phone, dob, district_id, state_id,
+      loksabha_id, vidhansabha_id, local_body_id, ward_id, booth_id, election_id,
+      income, income_no, nationality, nationality_no,
+      education, religion, cast, cast_no, non_crime_no,
+      party, amount, method
+    } = req.body;
+
+    const files = req.files;
+    const getFile = (key) => files[key]?.[0]?.filename || null;
+
+    // Build query dynamically to avoid overwriting files with NULL
+    const fields = [];
+    const values = [];
+
+    const pushField = (key, value) => {
+      fields.push(`${key} = ?`);
+      values.push(safe(value));
+    };
+
+    pushField('name', name);
+    pushField('email', email);
+    pushField('aadhar', aadhar);
+    pushField('phone', phone);
+    pushField('dob', dob);
+    pushField('district_id', district_id);
+    pushField('state_id', state_id);
+    pushField('loksabha_id', loksabha_id);
+    pushField('vidhansabha_id', vidhansabha_id);
+    pushField('local_body_id', local_body_id);
+    pushField('ward_id', ward_id);
+    pushField('booth_id', booth_id);
+    pushField('election_id', election_id);
+    pushField('income', income);
+    pushField('income_no', income_no);
+    pushField('nationality', nationality);
+    pushField('nationality_no', nationality_no);
+    pushField('education', education);
+    pushField('religion', religion);
+    pushField('cast', cast);
+    pushField('cast_no', cast_no);
+    pushField('non_crime_no', non_crime_no);
+    pushField('party', party);
+    pushField('amount', amount);
+    pushField('method', method);
+
+    // Only update file fields if a new file is uploaded
+    if (getFile('photo')) pushField('photo', getFile('photo'));
+    if (getFile('signature')) pushField('signature', getFile('signature'));
+    if (getFile('income_photo')) pushField('income_photo', getFile('income_photo'));
+    if (getFile('nationality_photo')) pushField('nationality_photo', getFile('nationality_photo'));
+    if (getFile('education_photo')) pushField('education_photo', getFile('education_photo'));
+    if (getFile('cast_photo')) pushField('cast_photo', getFile('cast_photo'));
+    if (getFile('non_crime_photo')) pushField('non_crime_photo', getFile('non_crime_photo'));
+    if (getFile('party_logo')) pushField('party_logo', getFile('party_logo'));
+
+    const result = await query({
+      query: `UPDATE candidates SET ${fields.join(', ')} WHERE id = ?`,
+      values: [...values, candidateId]
+    });
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Candidate not found' });
+    }
+
+    res.status(200).json({ message: 'Candidate updated successfully' });
+  } catch (error) {
+    console.error('Error updating candidate:', error);
+    res.status(500).json({ error: 'Failed to update candidate', details: error.message });
+  }
+});
+
 
 
 
@@ -1084,6 +1225,105 @@ app.post('/api/login', async (req, res) => {
     res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 });
+
+
+app.post('/api/results/generate', async (req, res) => {
+  const {
+    election_id,
+    election_name,
+    result_date,
+    vidhansabha_id,
+    loksabha_id
+  } = req.body;
+
+  if (!election_id || !election_name) {
+    return res.status(400).json({ error: 'Missing required election data' });
+  }
+
+  try {
+    // 🗳 Get vote counts
+    const voteCounts = await query({
+      query: `
+        SELECT 
+          c.name AS candidate_name,
+          c.party,
+          COUNT(v.id) AS vote_count
+        FROM candidates c
+        LEFT JOIN votes v ON c.id = v.candidate_id AND v.election_id = ?
+        WHERE c.election_id = ?
+        GROUP BY c.id, c.name, c.party
+        ORDER BY vote_count DESC
+        LIMIT 1
+      `,
+      values: [election_id, election_id]
+    });
+
+    if (voteCounts.length === 0) {
+      return res.status(400).json({ error: 'No votes found for this election' });
+    }
+
+    const winner = voteCounts[0];
+
+    // 🧮 Total votes
+    const totalVotesResult = await query({
+      query: `SELECT COUNT(*) AS total_votes FROM votes WHERE election_id = ?`,
+      values: [election_id]
+    });
+
+    const totalVotes = totalVotesResult[0].total_votes;
+    const now = new Date().toISOString().split('T')[0];
+
+    // 📝 Insert result
+    await query({
+      query: `
+        INSERT INTO result (
+          election_id, election_name, winner, total_votes, published, status, date,
+          vidhansabha_id, loksabha_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      values: [
+        election_id,
+        election_name,
+        winner.candidate_name,
+        totalVotes,
+        false,         // published = false
+        'Publish',     // status = "Publish"
+        result_date || now,
+        vidhansabha_id || null,
+        loksabha_id || null
+      ]
+    });
+
+    // ✅ Update election result status
+    await query({
+      query: `UPDATE elections SET result = 'Yes' WHERE id = ?`,
+      values: [election_id]
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Result generated successfully',
+      data: {
+        election_id,
+        election_name,
+        winner: winner.candidate_name,
+        total_votes: totalVotes,
+        published: false,
+        status: 'Publish',
+        date: result_date || now
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error generating result:', error);
+    res.status(500).json({
+      error: 'Failed to generate result',
+      details: error.message
+    });
+  }
+});
+
+
 
 
 
