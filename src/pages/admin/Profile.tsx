@@ -1,36 +1,48 @@
-
-import React from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import React, { useEffect, useState } from 'react';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from '@/contexts/AuthContext';
 import Layout from '@/components/Layout';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from '@/components/ui/avatar';
 import { useToast } from '@/components/ui/use-toast';
 import { User, Mail, Phone, Calendar, MapPin } from 'lucide-react';
+import axios from 'axios';
 
 const AdminProfile = () => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [adminProfile, setAdminProfile] = useState<any>(null);
 
-  // Mock admin profile data
-  const adminProfile = {
-    id: user?.id || '2',
-    name: user?.name || 'Admin User',
-    email: user?.email || 'admin@example.com',
-    phone: '+91 98765 43210',
-    dob: '1985-08-22',
-    joiningDate: '2023-03-15',
-    state: user?.state || 'Maharashtra',
-    district: user?.district || 'Mumbai',
-    constituency: user?.constituency || 'Mumbai North',
-    votersCount: 12435,
-    recentActivity: [
-      { action: 'Registered new voter', time: '3 hours ago' },
-      { action: 'Updated voter details', time: '1 day ago' },
-      { action: 'Downloaded voter list', time: '3 days ago' }
-    ]
-  };
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const fetchAdmin = async () => {
+      try {
+        const res = await axios.get(`/api/admins/user/${user.id}`);
+        setAdminProfile(res.data);
+      } catch (err) {
+        console.error('Error fetching admin:', err);
+        toast({
+          title: "Failed to load profile",
+          description: "Could not fetch admin details.",
+          variant: "destructive",
+        });
+      }
+    };
+
+    fetchAdmin();
+  }, [user?.id]);
 
   const handleUpdateProfile = () => {
     toast({
@@ -46,11 +58,19 @@ const AdminProfile = () => {
     });
   };
 
-  const userInitials = user?.name
+  const userInitials = adminProfile?.name
     ?.split(' ')
-    .map(name => name[0])
+    .map((n: string) => n[0])
     .join('')
     .toUpperCase() || 'AU';
+
+  if (!adminProfile) {
+    return (
+      <Layout>
+        <div className="p-6 text-center text-gray-500">Loading profile...</div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -65,7 +85,7 @@ const AdminProfile = () => {
             <CardContent>
               <div className="flex flex-col items-center space-y-4">
                 <Avatar className="h-32 w-32">
-                  <AvatarImage src={user?.photoUrl} alt={user?.name} />
+                  <AvatarImage src={adminProfile.photo_url} alt={adminProfile.name} />
                   <AvatarFallback className="text-2xl">{userInitials}</AvatarFallback>
                 </Avatar>
                 <h2 className="text-xl font-bold">{adminProfile.name}</h2>
@@ -73,7 +93,7 @@ const AdminProfile = () => {
                   Admin
                 </span>
               </div>
-              
+
               <div className="mt-6 space-y-4">
                 <div className="flex items-center">
                   <Mail className="h-4 w-4 mr-2 text-gray-500" />
@@ -92,7 +112,7 @@ const AdminProfile = () => {
                   <span>{adminProfile.constituency}, {adminProfile.district}</span>
                 </div>
               </div>
-              
+
               <div className="mt-6">
                 <Button onClick={handleChangePassword} variant="outline" className="w-full">
                   Change Password
@@ -127,12 +147,12 @@ const AdminProfile = () => {
                     <Input id="dob" type="date" defaultValue={adminProfile.dob} />
                   </div>
                 </div>
-                
+
                 <div className="space-y-2">
                   <label htmlFor="photo" className="text-sm font-medium">Profile Photo</label>
                   <Input id="photo" type="file" />
                 </div>
-                
+
                 <Button onClick={handleUpdateProfile} type="button" className="w-full md:w-auto">
                   Update Profile
                 </Button>
@@ -166,30 +186,21 @@ const AdminProfile = () => {
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Registered Voters</p>
-                    <p className="font-medium">{adminProfile.votersCount.toLocaleString()}</p>
+                    <p className="font-medium">{(adminProfile.votersCount || 0).toLocaleString()}</p>
                   </div>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Recent Activity */}
+          {/* Recent Activity Placeholder */}
           <Card>
             <CardHeader>
               <CardTitle>Recent Activity</CardTitle>
               <CardDescription>Your latest actions in the system</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {adminProfile.recentActivity.map((activity, index) => (
-                  <div key={index} className="border-b pb-3 last:border-0 last:pb-0">
-                    <div className="flex justify-between">
-                      <span>{activity.action}</span>
-                      <span className="text-sm text-gray-500">{activity.time}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <div className="text-gray-500">No recent activity available.</div>
             </CardContent>
           </Card>
         </div>

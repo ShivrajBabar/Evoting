@@ -422,25 +422,27 @@ app.get('/api/candidates', async (req, res) => {
     const formatted = candidates.map(candidate => ({
       id: candidate.id,
       name: candidate.name,
+      dob: candidate.dob,
       party: candidate.party,
       status: candidate.status,
-      dob: candidate.dob,
-      photo: getFileUrl(candidate.photo),
-      party_logo: getFileUrl(candidate.party_logo),
-      election: candidate.election_name || 'Unknown Election',
-      election_id: candidate.election_id, // ✅ Added election_id
-      constituency: candidate.constituency_name || 'Unknown Constituency'
+      photo_url: getFileUrl(candidate.photo),        // Updated key name to match frontend usage
+      party_logo_url: getFileUrl(candidate.party_logo),
+      election_type: candidate.election_name || 'Unknown Election', // Assuming this is what you expect
+      election_id: candidate.election_id,
+      vidhansabha_id: candidate.vidhansabha_id,     // ✅ Include vidhansabha_id as constituency_id
+      constituency_name: candidate.constituency_name || 'Unknown Constituency'
     }));
 
     res.status(200).json(formatted);
   } catch (error) {
     console.error('Error fetching candidates:', error);
-    res.status(500).json({ 
-      error: 'Failed to fetch candidates', 
-      details: error.message 
+    res.status(500).json({
+      error: 'Failed to fetch candidates',
+      details: error.message
     });
   }
 });
+
 
 
 
@@ -499,9 +501,9 @@ app.get('/api/candidates/:id', async (req, res) => {
     res.status(200).json(formatted);
   } catch (error) {
     console.error('Error fetching candidate:', error);
-    res.status(500).json({ 
-      error: 'Failed to fetch candidate', 
-      details: error.message 
+    res.status(500).json({
+      error: 'Failed to fetch candidate',
+      details: error.message
     });
   }
 });
@@ -669,9 +671,61 @@ app.get('/api/voters', async (req, res) => {
   }
 });
 
+app.get('/api/voters/:id', async (req, res) => {
+  const userId = req.params.id;
+  console.log(`📥 GET /api/voters/${userId}`);
+
+  try {
+    const [voter] = await pool.query(`
+      SELECT 
+        u.id AS user_id,
+        u.name,
+        u.email,
+        u.phone,
+        u.dob,
+        u.status,
+        u.photo_name,
+
+        v.voter_id AS voter_card_number,
+
+        s.name AS state_name,
+        d.name AS district_name,
+        ls.name AS loksabha_name,
+        vs.name AS vidhansabha_name,
+        mc.name AS municipal_corp_name,
+        mw.name AS ward_name,
+        b.name AS booth_name
+
+      FROM users u
+      JOIN voters v ON v.user_id = u.id
+
+      LEFT JOIN states s ON v.state_id = s.id
+      LEFT JOIN districts d ON v.district_id = d.id
+      LEFT JOIN loksabha_constituencies ls ON v.loksabha_ward_id = ls.id
+      LEFT JOIN vidhansabha_constituencies vs ON v.vidhansabha_ward_id = vs.id
+      LEFT JOIN local_bodies mc ON v.municipal_corp_id = mc.id
+      LEFT JOIN wards mw ON v.municipal_corp_ward_id = mw.id
+      LEFT JOIN booths b ON v.booth_id = b.id
+
+      WHERE u.id = ?
+      LIMIT 1
+    `, [userId]);
+
+    if (!voter || voter.length === 0) {
+      return res.status(404).json({ error: 'Voter not found' });
+    }
+
+    res.json(voter[0]);
+  } catch (error) {
+    console.error("❌ Error fetching voter by ID:", error);
+    res.status(500).json({ error: 'Failed to fetch voter', details: error.message });
+  }
+});
+
+
 // 10. Get admin by ID
-app.get('/api/admins/:id', async (req, res) => {
-  const { id } = req.params;
+app.get('/api/admins/user/:user_id', async (req, res) => {
+  const { user_id } = req.params;
 
   try {
     const result = await query({
@@ -695,10 +749,10 @@ app.get('/api/admins/:id', async (req, res) => {
         LEFT JOIN states s ON a.state_id = s.id
         LEFT JOIN districts d ON a.district_id = d.id
         LEFT JOIN vidhansabha_constituencies vc ON a.constituency_id = vc.id
-        WHERE a.id = ?
+        WHERE a.user_id = ?
         LIMIT 1
       `,
-      values: [id]
+      values: [user_id]
     });
 
     if (!result.length) {
@@ -712,8 +766,8 @@ app.get('/api/admins/:id', async (req, res) => {
 
     res.status(200).json(admin);
   } catch (err) {
-    console.error('Error fetching admin by ID:', err);
-    res.status(500).json({ error: 'Failed to fetch admin by ID' });
+    console.error('Error fetching admin by user_id:', err);
+    res.status(500).json({ error: 'Failed to fetch admin by user_id' });
   }
 });
 
@@ -798,36 +852,69 @@ app.get('/api/elections', async (req, res) => {
 });
 
 
-app.post('/api/votes', async (req, res) => {
-  const { voter_id, candidate_id, election_id } = req.body;
 
-  if (!voter_id || !candidate_id || !election_id) {
-    return res.status(400).json({ error: 'voter_id, candidate_id, and election_id are required' });
+
+app.post('/api/votes', async (req, res) => {
+  console.log("📥 Request body:", req.body);
+
+  const { email, candidate_id, election_id } = req.body;
+
+  if (!email || !candidate_id || !election_id) {
+    console.log("❌ Missing fields:", { email, candidate_id, election_id });
+    return res.status(400).json({ error: 'email, candidate_id, and election_id are required' });
   }
 
   try {
-    // Check if voter already voted in this election
-    const existingVote = await query({
-      query: `SELECT id FROM votes WHERE voter_id = ? AND election_id = ?`,
-      values: [voter_id, election_id]
-    });
+    // 1. Get user_id from users table
+    const [userResult] = await pool.query(
+      `SELECT id FROM users WHERE email = ?`,
+      [email]
+    );
 
-    if (existingVote.length > 0) {
-      return res.status(400).json({ error: 'Voter has already voted in this election' });
+    if (userResult.length === 0) {
+      return res.status(404).json({ error: 'User not found with this email' });
     }
 
-    // Record the vote
-    await query({
-      query: `INSERT INTO votes (voter_id, candidate_id, election_id, vote_date) VALUES (?, ?, ?, NOW())`,
-      values: [voter_id, candidate_id, election_id]
-    });
+    const user_id = userResult[0].id;
 
-    res.status(201).json({ message: 'Vote recorded successfully' });
+    // 2. Get voter_id from voters table using user_id
+    const [voterResult] = await pool.query(
+      `SELECT id FROM voters WHERE user_id = ?`,
+      [user_id]
+    );
+
+    if (voterResult.length === 0) {
+      return res.status(404).json({ error: 'Voter record not found for this user' });
+    }
+
+    const voter_id = voterResult[0].id;
+
+    // 3. Check if already voted
+    const [existingVote] = await pool.query(
+      `SELECT id FROM votes WHERE voter_id = ? AND election_id = ?`,
+      [voter_id, election_id]
+    );
+
+    if (existingVote.length > 0) {
+      return res.status(400).json({ error: 'You have already voted in this election' });
+    }
+
+    // 4. Insert vote
+    await pool.query(
+      `INSERT INTO votes (voter_id, candidate_id, election_id, vote_date) 
+       VALUES (?, ?, ?, NOW())`,
+      [voter_id, candidate_id, election_id]
+    );
+
+    res.status(201).json({ message: 'Vote recorded successfully ✅' });
   } catch (error) {
-    console.error('Error recording vote:', error);
+    console.error("❌ Error in /api/votes:", error);
     res.status(500).json({ error: 'Failed to record vote', details: error.message });
   }
 });
+
+
+
 
 app.get('/api/votes/counts', async (req, res) => {
   const { election_id } = req.query;
@@ -871,7 +958,7 @@ app.post('/api/login', async (req, res) => {
     // 1. Static Super Admin Check
     if (role.toLowerCase() === 'superadmin') {
       const dummyEmail = 'superadmin@example.com';
-      const dummyPasswordHash = await bcrypt.hash('password123', 10); 
+      const dummyPasswordHash = await bcrypt.hash('password123', 10);
 
       const isEmailMatch = email.toLowerCase() === dummyEmail;
       const isPasswordMatch = await bcrypt.compare(password, dummyPasswordHash);
@@ -893,17 +980,37 @@ app.post('/api/login', async (req, res) => {
       });
     }
 
-    // 2. Voter/Admin DB Login
-    const [user] = await pool.query(
-      `
-      SELECT u.id, u.name, u.email, u.phone, u.password, u.photo_name, r.role_name AS role_name
+    // Dynamically build the query based on role
+    let queryStr = `
+      SELECT 
+        u.id, u.name, u.email, u.phone, u.password, u.photo_name, r.role_name AS role_name
+    `;
+    let joins = `
       FROM users u
       JOIN roles r ON u.role_id = r.id
-      WHERE u.email = ?
-      LIMIT 1
-      `,
-      [email]
-    );
+    `;
+    let extraFields = {};
+    
+    if (role.toLowerCase() === 'voter') {
+      queryStr += `,
+        v.loksabha_ward_id, 
+        v.vidhansabha_ward_id, 
+        v.municipal_corp_id
+      `;
+      joins += ` LEFT JOIN voters v ON u.id = v.user_id`;
+    }
+
+    if (role.toLowerCase() === 'admin') {
+      queryStr += `,
+        a.constituency_id,
+        a.district_id
+      `;
+      joins += ` LEFT JOIN admins a ON u.id = a.user_id`;
+    }
+
+    queryStr += joins + ` WHERE u.email = ? LIMIT 1`;
+
+    const [user] = await pool.query(queryStr, [email]);
 
     if (!user || user.length === 0) {
       return res.status(404).json({ error: 'Invalid email or password' });
@@ -920,6 +1027,19 @@ app.post('/api/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
+    // Prepare additional fields
+    if (role.toLowerCase() === 'voter') {
+      extraFields = {
+        loksabha_id: foundUser.loksabha_ward_id || null,
+        vidhansabha_id: foundUser.vidhansabha_ward_id || null,
+        local_body_id: foundUser.municipal_corp_id || null
+      };
+    } else if (role.toLowerCase() === 'admin') {
+      extraFields = {
+        vidhansabha_id: foundUser.constituency_id || null
+      };
+    }
+
     res.status(200).json({
       message: 'Login successful',
       user: {
@@ -931,6 +1051,7 @@ app.post('/api/login', async (req, res) => {
         photo: foundUser.photo_name
           ? `http://localhost:${PORT}/uploads/photos/${foundUser.photo_name}`
           : null,
+        ...extraFields
       }
     });
 
@@ -939,6 +1060,8 @@ app.post('/api/login', async (req, res) => {
     res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 });
+
+
 
 
 

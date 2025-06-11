@@ -1,10 +1,24 @@
 import React, { useEffect, useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import {
+  Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter
+} from "@/components/ui/card";
 import { useAuth } from '@/contexts/AuthContext';
 import Layout from '@/components/Layout';
 import { Vote, Calendar, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
+
+interface ExtendedUser {
+  id: number;
+  name: string;
+  email: string;
+  phone?: string;
+  role: string;
+  photo?: string | null;
+  local_body_id?: number;
+  vidhansabha_id?: number;
+  loksabha_id?: number;
+}
 
 interface Election {
   id: number;
@@ -12,10 +26,26 @@ interface Election {
   date: string;
   status: string;
   description: string;
+  loksabha?: number;
+  vidhansabha?: number;
+  localBody?: number;
 }
 
 const VoterDashboard = () => {
   const { user } = useAuth();
+
+  const typedUser: ExtendedUser = {
+    id: Number(user?.id),
+    name: user?.name || '',
+    email: user?.email || '',
+    phone: user?.phone,
+    role: user?.role || '',
+    photo: user?.photo || null,
+    local_body_id: user?.local_body_id ? Number(user.local_body_id) : undefined,
+    vidhansabha_id: user?.vidhansabha_id ? Number(user.vidhansabha_id) : undefined,
+    loksabha_id: user?.loksabha_id ? Number(user.loksabha_id) : undefined,
+  };
+
   const [ongoingElections, setOngoingElections] = useState<Election[]>([]);
   const [upcomingElections, setUpcomingElections] = useState<Election[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,34 +53,50 @@ const VoterDashboard = () => {
   const today = new Date();
 
   useEffect(() => {
-    const fetchElections = async () => {
-      try {
-        const res = await fetch('/api/elections');
-        const data = await res.json();
+  const fetchElections = async () => {
+    try {
+      const res = await fetch('/api/elections');
+      const data: Election[] = await res.json();
 
-        const upcoming = [];
-        const ongoing = [];
+      console.log("User IDs:", typedUser);
+      console.log("Fetched elections:", data);
 
-        for (const election of data) {
-          const electionDate = new Date(election.date);
-          if (election.status.toLowerCase() === 'active') {
-            ongoing.push(election);
-          } else if (electionDate > today) {
-            upcoming.push(election);
-          }
+      const filtered = data.filter(election => {
+        const loksabhaMatch = Number(election.loksabha) === typedUser.loksabha_id;
+        const vidhansabhaMatch = Number(election.vidhansabha) === typedUser.vidhansabha_id;
+        const localBodyMatch = Number(election.localBody) === typedUser.local_body_id;
+
+        if (loksabhaMatch || vidhansabhaMatch || localBodyMatch) {
+          console.log("MATCHED election:", election.name);
         }
 
-        setOngoingElections(ongoing);
-        setUpcomingElections(upcoming);
-      } catch (err) {
-        console.error("Error fetching elections:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
+        return loksabhaMatch || vidhansabhaMatch || localBodyMatch;
+      });
 
-    fetchElections();
-  }, []);
+      const upcoming: Election[] = [];
+      const ongoing: Election[] = [];
+
+      for (const election of filtered) {
+        const electionDate = new Date(election.date);
+        if (election.status.toLowerCase() === 'active') {
+          ongoing.push(election);
+        } else if (electionDate > new Date()) {
+          upcoming.push(election);
+        }
+      }
+
+      setOngoingElections(ongoing);
+      setUpcomingElections(upcoming);
+    } catch (err) {
+      console.error("Error fetching elections:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchElections();
+}, [typedUser]);
+
 
   const votingHistory = [
     { id: 1, election: 'Maharashtra Vidhan Sabha Elections', date: '2023-11-20', receipt: 'MHVS2023001234' },
@@ -63,8 +109,8 @@ const VoterDashboard = () => {
         {/* Welcome message */}
         <Card className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white">
           <CardContent className="p-6">
-            <h2 className="text-2xl font-bold">Welcome, {user?.name}</h2>
-            <p className="mt-2">You are viewing {user?.electionType || 'All'} elections</p>
+            <h2 className="text-2xl font-bold">Welcome, {typedUser.name}</h2>
+            <p className="mt-2">You are viewing elections relevant to your constituency.</p>
           </CardContent>
         </Card>
 
@@ -77,7 +123,7 @@ const VoterDashboard = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p>Please keep your Voter ID and government-issued photo ID ready when casting your vote. For any assistance, contact your local election office.</p>
+            <p>Please keep your Voter ID and government-issued photo ID ready when casting your vote.</p>
           </CardContent>
         </Card>
 

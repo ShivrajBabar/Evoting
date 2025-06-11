@@ -7,13 +7,13 @@ import { Calendar, Vote, AlertCircle, Check, Info } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
 const VoterElections = () => {
-  // const { user } = useAuth();
-  const user =  JSON.parse(localStorage.getItem("user"));
-  console.log(user)
   const { toast } = useToast();
-
   const [elections, setElections] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Get user data from localStorage
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const voterEmail = user?.email; // Get email from user object
 
   useEffect(() => {
     const fetchElectionsAndCandidates = async () => {
@@ -21,8 +21,15 @@ const VoterElections = () => {
         const res = await fetch('http://localhost:3000/api/elections');
         const data = await res.json();
 
-        // Normalize status "Scheduled" to "Upcoming"
-        const normalized = data.map((e: any) => {
+        // Match voter eligibility
+        const filtered = data.filter((election: any) => {
+          const loksabhaMatch = Number(election.loksabha) === Number(user.loksabha_id);
+          const vidhansabhaMatch = Number(election.vidhansabha) === Number(user.vidhansabha_id);
+          const localBodyMatch = Number(election.localBody) === Number(user.local_body_id);
+          return loksabhaMatch || vidhansabhaMatch || localBodyMatch;
+        });
+
+        const normalized = filtered.map((e: any) => {
           if (e.status === "Scheduled") return { ...e, status: "Upcoming" };
           return e;
         });
@@ -49,32 +56,39 @@ const VoterElections = () => {
     fetchElectionsAndCandidates();
   }, []);
 
+
+
   const handleVote = async (candidateId: number, electionId: number) => {
-    if (!user?.id) {
-      toast({ title: "Unauthorized", description: "Please login as a voter to cast your vote." });
+    if (!user?.id || !voterEmail) {
+      toast({
+        title: "Unauthorized",
+        description: "Please login as a voter to cast your vote."
+      });
       return;
     }
 
     try {
-      const res = await fetch('http://localhost:3000/api/votes', {
+      const response = await fetch('http://localhost:3000/api/votes', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
-          voter_id: user?.id,
-          candidate_id: candidateId,
-          election_id: electionId
+          email: voterEmail,        // From localStorage
+          candidate_id: candidateId, // From the vote button click
+          election_id: electionId    // From the election card
         })
       });
 
-      const result = await res.json();
+      const result = await response.json();
 
-      if (res.ok) {
+      if (response.ok) {
         toast({
           title: "Vote Cast Successfully",
           description: `Your vote for election #${electionId} has been recorded.`,
         });
 
-        // Optionally mark the election as voted (for UI state)
+        // Update UI to show vote was cast
         setElections(prev =>
           prev.map(e =>
             e.id === electionId ? { ...e, voteCast: true } : e
@@ -94,6 +108,7 @@ const VoterElections = () => {
       });
     }
   };
+
 
 
   const handleViewReceipt = (receipt: string) => {

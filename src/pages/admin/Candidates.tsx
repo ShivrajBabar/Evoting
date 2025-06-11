@@ -72,32 +72,38 @@ const AdminCandidates = () => {
     fetchConstituencies();
   }, [user, toast]);
 
+
   // Fetch candidates data
-   useEffect(() => {
+  useEffect(() => {
     const fetchCandidates = async () => {
       setLoading(true);
       try {
         const stateId = user && 'state_id' in user ? (user as any).state_id : 1;
-        const response = await fetch(`/api/candidates?state_id=${stateId}`);
+        const adminVidhansabhaId = user && 'vidhansabha_id' in user ? (user as any).vidhansabha_id : null;
 
+        const response = await fetch(`/api/candidates?state_id=${stateId}`);
         if (!response.ok) {
           throw new Error('Failed to fetch candidates');
         }
 
         const dataFromApi = await response.json();
 
-        // Map API response to match expected Candidate type
-        const mappedCandidates: Candidate[] = dataFromApi.map((c: any) => ({
+        // Filter candidates by admin's vidhansabha_id
+        const filtered = dataFromApi.filter((c: any) => c.vidhansabha_id === adminVidhansabhaId);
+
+        // Map filtered data to Candidate type
+        const mappedCandidates: Candidate[] = filtered.map((c: any) => ({
           id: c.id,
           name: c.name,
           party: c.party,
-          status: c.status.charAt(0).toUpperCase() + c.status.slice(1), // Capitalize first letter
-          photo_url: c.photo,
-          symbol: '', // Assuming your API does not provide symbol
-          election_type: c.election.toLowerCase().includes('lok') ? 'loksabha' : 'vidhansabha',
-          constituency_id: 0, // No ID in API response, set 0 or update if you get it later
-          constituency_name: c.constituency,
+          status: c.status ? c.status.charAt(0).toUpperCase() + c.status.slice(1) : 'Unknown',
+          photo_url: c.photo_url || '', // ✅ Use correct field
+          symbol: '', // Use c.party_logo_url if you want to display party symbol
+          election_type: c.election_type?.toLowerCase().includes('lok') ? 'loksabha' : 'vidhansabha', // ✅ Updated field
+          constituency_id: c.vidhansabha_id || 0,
+          constituency_name: c.constituency_name || 'Unknown', // ✅ Use correct field
         }));
+
 
         setCandidates(mappedCandidates);
         setLoading(false);
@@ -114,6 +120,7 @@ const AdminCandidates = () => {
 
     fetchCandidates();
   }, [user, toast]);
+
 
 
   const handleViewCandidate = (candidate: Candidate) => {

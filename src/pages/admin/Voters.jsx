@@ -24,20 +24,20 @@ const Voters = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
-  
+
   const [voters, setVoters] = useState([]);
   const [filteredVoters, setFilteredVoters] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [emailLoading, setEmailLoading] = useState(false);
-  
+
   const [selectedVoter, setSelectedVoter] = useState(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  
+
   // Sort states
   const [sortField, setSortField] = useState('name');
   const [sortDirection, setSortDirection] = useState('asc');
-  
+
   // Fetch voters data
   useEffect(() => {
     const fetchVoters = async () => {
@@ -47,8 +47,7 @@ const Voters = () => {
           throw new Error('Failed to fetch voters');
         }
         const data = await response.json();
-        
-        // Transform the API data to match our expected format
+
         const transformedVoters = data.map(voter => ({
           id: voter.voter_id,
           user_id: voter.user_id,
@@ -67,11 +66,14 @@ const Voters = () => {
           municipal_corp_ward_id: voter.municipal_corp_ward_id,
           booth_id: voter.booth_id
         }));
-        
-        // Filter voters by admin's constituency if needed
-        // (Assuming we might filter by some ward ID in the future)
-        const filteredByConstituency = transformedVoters;
-          
+
+        const filteredByConstituency = transformedVoters.filter(
+          (voter) =>
+            voter.vidhansabha_ward_id &&
+            user?.vidhansabha_id &&
+            voter.vidhansabha_ward_id === user.vidhansabha_id
+        );
+
         setVoters(filteredByConstituency);
         setFilteredVoters(filteredByConstituency);
         setLoading(false);
@@ -85,10 +87,11 @@ const Voters = () => {
         });
       }
     };
-    
+
+
     fetchVoters();
   }, [user, toast]);
-  
+
   // Handle search
   useEffect(() => {
     const filtered = voters.filter(voter =>
@@ -96,23 +99,23 @@ const Voters = () => {
       voter.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
       voter.voter_card_number?.toLowerCase().includes(searchQuery.toLowerCase())
     );
-    
+
     const sorted = [...filtered].sort((a, b) => {
       const valueA = a[sortField];
       const valueB = b[sortField];
-      
+
       if (valueA === valueB) return 0;
-      
+
       if (sortDirection === 'asc') {
         return valueA < valueB ? -1 : 1;
       } else {
         return valueA > valueB ? -1 : 1;
       }
     });
-    
+
     setFilteredVoters(sorted);
   }, [searchQuery, voters, sortField, sortDirection]);
-  
+
   // Handle sort toggle
   const handleSortToggle = (field) => {
     if (sortField === field) {
@@ -122,12 +125,12 @@ const Voters = () => {
       setSortDirection('asc');
     }
   };
-  
+
   // Handle voter status toggle
   const handleStatusToggle = async (voter) => {
     try {
       const newStatus = voter.status === 'active' ? 'inactive' : 'active';
-      
+
       // Update in the database first
       const response = await fetch(`/api/users/${voter.user_id}/status`, {
         method: 'PATCH',
@@ -136,11 +139,11 @@ const Voters = () => {
         },
         body: JSON.stringify({ status: newStatus })
       });
-      
+
       if (!response.ok) {
         throw new Error('Failed to update status');
       }
-      
+
       // Then update local state
       const updatedVoters = voters.map(v => {
         if (v.id === voter.id) {
@@ -148,9 +151,9 @@ const Voters = () => {
         }
         return v;
       });
-      
+
       setVoters(updatedVoters);
-      
+
       toast({
         title: "Status Updated",
         description: `${voter.name}'s status has been updated to ${newStatus}.`,
@@ -164,27 +167,27 @@ const Voters = () => {
       });
     }
   };
-  
+
   // Handle delete
   const handleDelete = async () => {
     if (!selectedVoter) return;
-    
+
     try {
       // First delete from the database
       const response = await fetch(`/api/voters/${selectedVoter.id}`, {
         method: 'DELETE'
       });
-      
+
       if (!response.ok) {
         throw new Error('Failed to delete voter');
       }
-      
+
       // Then update local state
       const updatedVoters = voters.filter(voter => voter.id !== selectedVoter.id);
       setVoters(updatedVoters);
       setIsDeleteDialogOpen(false);
       setSelectedVoter(null);
-      
+
       toast({
         title: "Voter Deleted",
         description: `${selectedVoter.name} has been removed from the system.`,
@@ -203,13 +206,13 @@ const Voters = () => {
   const handleSendCredentials = async (voter) => {
     try {
       setEmailLoading(true);
-      
+
       await AuthService.sendLoginCredentials(
         voter.email,
         'tempPass123', // In real app would be generated
         'voter'
       );
-      
+
       setEmailLoading(false);
       toast({
         title: "Email Sent",
@@ -225,7 +228,7 @@ const Voters = () => {
       });
     }
   };
-  
+
   return (
     <Layout>
       <div className="container mx-auto p-4">
@@ -236,7 +239,7 @@ const Voters = () => {
             Register New Voter
           </Button>
         </div>
-        
+
         <Card>
           <CardHeader>
             <CardTitle>Voters</CardTitle>
@@ -319,7 +322,7 @@ const Voters = () => {
                                   {voter.status === 'active' ? 'Deactivate' : 'Activate'}
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem 
+                                <DropdownMenuItem
                                   className="text-destructive focus:text-destructive"
                                   onClick={() => {
                                     setSelectedVoter(voter);
@@ -347,7 +350,7 @@ const Voters = () => {
           </CardFooter>
         </Card>
       </div>
-      
+
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>

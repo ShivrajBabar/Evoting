@@ -12,12 +12,20 @@ export interface User {
   name: string;
   email: string;
   role: UserRole;
+  phone?: string;
+  photo?: string | null;            // backend uses 'photo'
+  local_body_id?: number;
+  vidhansabha_id?: number;
+  loksabha_id?: number;
+  electionType?: string;
+
+  // Optional frontend-only fields (if needed)
   photoUrl?: string;
   constituency?: string;
   state?: string;
   district?: string;
-  electionType?: string;
 }
+
 
 interface AuthContextType {
   user: User | null;
