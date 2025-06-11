@@ -14,6 +14,8 @@ export interface User {
   role: UserRole;
   phone?: string;
   photo?: string | null;            // backend uses 'photo'
+  state_id?: number;
+  district_id?: number;
   local_body_id?: number;
   vidhansabha_id?: number;
   loksabha_id?: number;

@@ -990,7 +990,7 @@ app.post('/api/login', async (req, res) => {
       JOIN roles r ON u.role_id = r.id
     `;
     let extraFields = {};
-    
+
     if (role.toLowerCase() === 'voter') {
       queryStr += `,
         v.loksabha_ward_id, 
@@ -1003,7 +1003,8 @@ app.post('/api/login', async (req, res) => {
     if (role.toLowerCase() === 'admin') {
       queryStr += `,
         a.constituency_id,
-        a.district_id
+        a.district_id,
+        a.state_id
       `;
       joins += ` LEFT JOIN admins a ON u.id = a.user_id`;
     }
@@ -1036,7 +1037,9 @@ app.post('/api/login', async (req, res) => {
       };
     } else if (role.toLowerCase() === 'admin') {
       extraFields = {
-        vidhansabha_id: foundUser.constituency_id || null
+        vidhansabha_id: foundUser.constituency_id || null,
+        district_id: foundUser.district_id || null,
+        state_id: foundUser.state_id || null
       };
     }
 

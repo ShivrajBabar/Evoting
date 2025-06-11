@@ -86,6 +86,48 @@ const RegisterVoter = () => {
   const [wards, setWards] = useState<Option[]>([]);
   const [booths, setBooths] = useState<Option[]>([]);
 
+  const adminStateId = user?.state_id?.toString();
+  const adminDistrictId = user?.district_id?.toString();
+  const adminVidhansabhaId = user?.vidhansabha_id?.toString();
+
+
+
+
+useEffect(() => {
+  const preloadDropdownValues = async () => {
+    try {
+      const statesRes = await fetch('http://localhost:3000/api/states');
+      const allStates = await statesRes.json();
+      setStates(allStates.map((s) => ({ value: s.id.toString(), label: s.name })));
+
+      const districtsRes = await fetch(`http://localhost:3000/api/districts?state_id=${adminStateId}`);
+      const allDistricts = await districtsRes.json();
+      setDistricts(allDistricts.map((d) => ({ value: d.id.toString(), label: d.name })));
+
+      const vidhansabhaRes = await fetch(`http://localhost:3000/api/constituencies?district_id=${adminDistrictId}&type=vidhansabha`);
+      const allVidhanSabhas = await vidhansabhaRes.json();
+      setVidhansabhas(allVidhanSabhas.map((v) => ({ value: v.id.toString(), label: v.name })));
+
+      // Manually trigger dependent fetches
+      await handleLoksabhaChange(adminStateId || '');
+      await handleDistrictChange(adminDistrictId || '');
+      await handleVidhansabhaChange(adminVidhansabhaId || '', adminDistrictId || '');
+
+      // Set values in the form
+      form.setValue("state", adminStateId || '');
+      form.setValue("district", adminDistrictId || '');
+      form.setValue("vidhansabhaWard", adminVidhansabhaId || '');
+    } catch (err) {
+      console.error("Error preloading dropdown values:", err);
+    }
+  };
+
+  if (adminStateId && adminDistrictId && adminVidhansabhaId) {
+    preloadDropdownValues();
+  }
+}, [adminStateId, adminDistrictId, adminVidhansabhaId, form]);
+
+
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       setPhotoFile(e.target.files[0]);
@@ -351,13 +393,7 @@ const RegisterVoter = () => {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>State*</FormLabel>
-                        <Select
-                          onValueChange={(value) => {
-                            field.onChange(value);
-                            handleStateChange(value);
-                          }}
-                          value={field.value}
-                        >
+                        <Select value={field.value} disabled>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select State" />
@@ -382,14 +418,7 @@ const RegisterVoter = () => {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>District*</FormLabel>
-                        <Select
-                          onValueChange={(value) => {
-                            field.onChange(value);
-                            handleDistrictChange(value);
-                          }}
-                          value={field.value}
-                          disabled={districts.length === 0}
-                        >
+                        <Select value={field.value} disabled>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select District" />
@@ -441,24 +470,17 @@ const RegisterVoter = () => {
                     name="vidhansabhaWard"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Vidhan Sabha Constituency*</FormLabel>
-                        <Select
-                          onValueChange={(value) => {
-                            const districtId = form.getValues("district");
-                            handleVidhansabhaChange(value, districtId);
-                          }}
-                          value={field.value}
-                          disabled={vidhansabhas.length === 0}
-                        >
+                        <FormLabel>Vidhan Sabha*</FormLabel>
+                        <Select value={field.value} disabled>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select Vidhan Sabha" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {vidhansabhas.map((constituency) => (
-                              <SelectItem key={constituency.value} value={constituency.value}>
-                                {constituency.label}
+                            {vidhansabhas.map((vs) => (
+                              <SelectItem key={vs.value} value={vs.value}>
+                                {vs.label}
                               </SelectItem>
                             ))}
                           </SelectContent>
