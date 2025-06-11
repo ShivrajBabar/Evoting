@@ -34,35 +34,33 @@ import {
   AvatarImage,
   AvatarFallback,
 } from "@/components/ui/avatar";
-import {
-  states,
-  allDistricts,
-  allVidhansabhas,
-  getOptionsForDropdown,
-} from "@/utils/locationData";
 
 const formSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
   email: z.string().email({ message: "Please enter a valid email address." }),
   phone: z.string().min(10, { message: "Phone number must be at least 10 digits." }),
-  dob: z.string(),
-  state: z.string(),
-  district: z.string(),
-  vidhansabha: z.string(),
+  dob: z.string().optional(),
+  state: z.string().nonempty({ message: "State is required." }),
+  district: z.string().nonempty({ message: "District is required." }),
+  vidhansabha: z.string().nonempty({ message: "Vidhan Sabha is required." }),
 });
 
 const EditAdmin = () => {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  // State for dropdown options
+  const [states, setStates] = useState<{ value: string; label: string }[]>([]);
+  const [districts, setDistricts] = useState<{ value: string; label: string }[]>([]);
+  const [vidhansabhas, setVidhansabhas] = useState<{ value: string; label: string }[]>([]);
+  const [photoFile, setPhotoFile] = useState<File | null>(null); // ✅ Add this line
 
+
+  // Avatar photo URL state
   const [avatarUrl, setAvatarUrl] = useState<string>("/placeholder.svg");
 
-  const [states, setStates] = useState<{ value: string, label: string }[]>([]);
-  const [districts, setDistricts] = useState<{ value: string, label: string }[]>([]);
-  const [vidhansabhas, setVidhansabhas] = useState<{ value: string, label: string }[]>([]);
-
+  // React Hook Form setup
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -76,37 +74,96 @@ const EditAdmin = () => {
     },
   });
 
-  // Fetch admin data by ID
+  // Load initial data: states and admin info
   useEffect(() => {
     const fetchAll = async () => {
-      await fetchStates(); // 🔧 this was missing!
-      if (id) await fetchAdmin();
+      await fetchStates();
+      if (id) await fetchAdmin(id);
     };
 
     fetchAll();
   }, [id]);
 
-
-  const fetchAdmin = async () => {
+  // Fetch list of states for dropdown
+  const fetchStates = async () => {
     try {
-      const res = await fetch(`http://localhost:3000/api/admins/${id}`);
+      const response = await fetch("http://localhost:3000/api/states");
+      if (!response.ok) throw new Error("Failed to fetch states");
+      const data = await response.json();
+      setStates(
+        data.map((state: any) => ({
+          value: state.id.toString(),
+          label: state.name,
+        }))
+      );
+    } catch (error) {
+      console.error("Error fetching states:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to fetch states",
+      });
+    }
+  };
+
+  const fetchDependentData = async (data: any) => {
+    try {
+      if (states.length === 0) {
+        const statesRes = await fetch('/api/states');
+        const statesData = await statesRes.json();
+        setStates(statesData.map((s: any) => ({ value: s.id.toString(), label: s.name })));
+      }
+
+      if (data.state_id) {
+        const districtsRes = await fetch(`/api/districts?state_id=${data.state_id}`);
+        const districtsData = await districtsRes.json();
+        setDistricts(districtsData.map((d: any) => ({ value: d.id.toString(), label: d.name })));
+      }
+
+      if (data.district_id) {
+        const vidhansabhaRes = await fetch(`/api/constituencies?district_id=${data.district_id}&type=vidhansabha`);
+        const vidhansabhaData = await vidhansabhaRes.json();
+        setVidhansabhas(vidhansabhaData.map((c: any) => ({ value: c.id.toString(), label: c.name })));
+      }
+    } catch (error) {
+      console.error('Error fetching dependent data:', error);
+    }
+  };
+
+  const fetchAdmin = async (userId: string) => {
+    try {
+      const res = await fetch(`http://localhost:3000/api/admins/users/${userId}`);
       if (!res.ok) throw new Error("Failed to load admin data");
       const data = await res.json();
 
+      await fetchDependentData(data); // <-- fetch all dependent dropdowns
+
+      // Format dob as YYYY-MM-DD for input type="date"
+      const formattedDob = data.dob ? new Date(data.dob).toISOString().split("T")[0] : "";
+
       form.reset({
-        name: data.name,
-        email: data.email,
-        phone: data.phone,
-        dob: data.dob || "",
-        state: data.state_id.toString(),
-        district: data.district_id.toString(),
-        vidhansabha: data.constituency_id.toString(),
+        name: data.name || "",
+        email: data.email || "",
+        phone: data.phone || "",
+        dob: formattedDob,
+        state: data.state_id?.toString() || "",
+        district: data.district_id?.toString() || "",
+        vidhansabha: data.constituency_id?.toString() || "",
       });
 
-      setAvatarUrl(data.photo_url || "/placeholder.svg");
+      // Use photo_url if available, fallback to placeholder
+      if (data.photo_url) {
+        setAvatarUrl(
+          data.photo_url.startsWith("http")
+            ? data.photo_url
+            : `http://localhost:3000${data.photo_url}`
+        );
+      } else if (data.photo_name) {
+        setAvatarUrl(`http://localhost:3000/uploads/${data.photo_name}`);
+      } else {
+        setAvatarUrl("/placeholder.svg");
+      }
 
-      await handleStateChange(data.state_id.toString());
-      await handleDistrictChange(data.district_id.toString());
     } catch (err: any) {
       toast({
         variant: "destructive",
@@ -116,76 +173,86 @@ const EditAdmin = () => {
     }
   };
 
-
-
-
-  const fetchStates = async () => {
+  // When state changes: fetch districts and reset downstream selects
+  const handleStateChange = async (stateId: string, resetChild = true) => {
     try {
-      const response = await fetch('http://localhost:3000/api/states');
+      const response = await fetch(
+        `http://localhost:3000/api/districts?state_id=${stateId}`
+      );
+      if (!response.ok) throw new Error("Failed to fetch districts");
       const data = await response.json();
-      setStates(data.map((state: any) => ({
-        value: state.id.toString(),
-        label: state.name
-      })));
-    } catch (error) {
-      console.error('Error fetching states:', error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch states",
-        variant: "destructive"
-      });
-    }
-  };
 
-  const handleStateChange = async (stateId: string) => {
-    try {
-      const response = await fetch(`http://localhost:3000/api/districts?state_id=${stateId}`);
-      const data = await response.json();
-      setDistricts(data.map((district: any) => ({
-        value: district.id.toString(),
-        label: district.name
-      })));
-      // Clear dependent fields
-      setVidhansabhas([]);
-      form.setValue('district', '');
-      form.setValue('vidhansabha', '');
+      setDistricts(
+        data.map((district: any) => ({
+          value: district.id.toString(),
+          label: district.name,
+        }))
+      );
+
+      if (resetChild) {
+        setVidhansabhas([]);
+        form.setValue("district", "");
+        form.setValue("vidhansabha", "");
+      }
     } catch (error) {
-      console.error('Error fetching districts:', error);
+      console.error("Error fetching districts:", error);
       toast({
+        variant: "destructive",
         title: "Error",
         description: "Failed to fetch districts",
-        variant: "destructive"
       });
     }
   };
 
-  const handleDistrictChange = async (districtId: string) => {
+  // When district changes: fetch Vidhan Sabhas and reset downstream selects
+  const handleDistrictChange = async (districtId: string, resetChild = true) => {
     try {
       const response = await fetch(
         `http://localhost:3000/api/constituencies?district_id=${districtId}&type=vidhansabha`
       );
+      if (!response.ok) throw new Error("Failed to fetch Vidhan Sabhas");
       const data = await response.json();
-      setVidhansabhas(data.map((constituency: any) => ({
-        value: constituency.id.toString(),
-        label: constituency.name
-      })));
-      form.setValue('vidhansabha', '');
+
+      setVidhansabhas(
+        data.map((constituency: any) => ({
+          value: constituency.id.toString(),
+          label: constituency.name,
+        }))
+      );
+
+      if (resetChild) {
+        form.setValue("vidhansabha", "");
+      }
     } catch (error) {
-      console.error('Error fetching vidhansabhas:', error);
+      console.error("Error fetching Vidhan Sabhas:", error);
       toast({
+        variant: "destructive",
         title: "Error",
         description: "Failed to fetch Vidhan Sabha constituencies",
-        variant: "destructive"
       });
     }
   };
 
+  // Submit handler to update admin data
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
+      const formData = new FormData(); // ✅ Create FormData
+
+      formData.append("name", values.name);
+      formData.append("email", values.email);
+      formData.append("phone", values.phone);
+      formData.append("dob", values.dob || "");
+      formData.append("state_id", values.state);
+      formData.append("district_id", values.district);
+      formData.append("constituency_id", values.vidhansabha);
+
+      if (photoFile) {
+        formData.append("photo", photoFile); // ✅ Append photo if selected
+      }
+
       const res = await fetch(`http://localhost:3000/api/admins/${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
+        body: formData, // ✅ Send FormData
       });
 
       if (!res.ok) throw new Error("Failed to update admin");
@@ -218,51 +285,84 @@ const EditAdmin = () => {
               </Avatar>
               <div>
                 <CardTitle>{form.watch("name")}</CardTitle>
-                <CardDescription>{form.watch("vidhansabha")} Constituency Admin</CardDescription>
+                <CardDescription>
+                  {vidhansabhas.find((v) => v.value === form.watch("vidhansabha"))?.label || "Constituency Admin"}
+                </CardDescription>
               </div>
             </div>
           </CardHeader>
           <CardContent>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6" noValidate>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Name, Email, Phone, DOB */}
-                  {["name", "email", "phone", "dob"].map((field) => (
-                    <FormField
-                      key={field}
-                      control={form.control}
-                      name={field as any}
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>{field.name.charAt(0).toUpperCase() + field.name.slice(1)}*</FormLabel>
-                          <FormControl>
-                            <Input {...field} type={field.name === "dob" ? "date" : "text"} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  ))}
-
-                  {/* State Dropdown */}
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Full Name" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input type="email" placeholder="Email" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="phone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Phone</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Phone Number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="dob"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Date of Birth</FormLabel>
+                        <FormControl>
+                          <Input type="date" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                   <FormField
                     control={form.control}
                     name="state"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>State*</FormLabel>
+                        <FormLabel>State</FormLabel>
                         <Select
-                          onValueChange={(value) => {
-                            field.onChange(value);
-                            handleStateChange(value);
+                          onValueChange={(val) => {
+                            field.onChange(val);
+                            handleStateChange(val);
                           }}
                           value={field.value}
                         >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select state" />
-                            </SelectTrigger>
-                          </FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a state" />
+                          </SelectTrigger>
                           <SelectContent>
                             {states.map((state) => (
                               <SelectItem key={state.value} value={state.value}>
@@ -275,27 +375,23 @@ const EditAdmin = () => {
                       </FormItem>
                     )}
                   />
-
-                  {/* District Dropdown */}
                   <FormField
                     control={form.control}
                     name="district"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>District*</FormLabel>
+                        <FormLabel>District</FormLabel>
                         <Select
-                          onValueChange={(value) => {
-                            field.onChange(value);
-                            handleDistrictChange(value);
+                          onValueChange={(val) => {
+                            field.onChange(val);
+                            handleDistrictChange(val);
                           }}
                           value={field.value}
-                          disabled={districts.length === 0}
+                          disabled={!field.value && districts.length === 0}
                         >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select district" />
-                            </SelectTrigger>
-                          </FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a district" />
+                          </SelectTrigger>
                           <SelectContent>
                             {districts.map((district) => (
                               <SelectItem key={district.value} value={district.value}>
@@ -308,28 +404,24 @@ const EditAdmin = () => {
                       </FormItem>
                     )}
                   />
-
-                  {/* Vidhansabha Dropdown */}
                   <FormField
                     control={form.control}
                     name="vidhansabha"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Vidhan Sabha Constituency*</FormLabel>
+                        <FormLabel>Vidhan Sabha</FormLabel>
                         <Select
                           onValueChange={field.onChange}
                           value={field.value}
-                          disabled={vidhansabhas.length === 0}
+                          disabled={!field.value && vidhansabhas.length === 0}
                         >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select Vidhan Sabha constituency" />
-                            </SelectTrigger>
-                          </FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select Vidhan Sabha" />
+                          </SelectTrigger>
                           <SelectContent>
-                            {vidhansabhas.map((constituency) => (
-                              <SelectItem key={constituency.value} value={constituency.value}>
-                                {constituency.label}
+                            {vidhansabhas.map((vs) => (
+                              <SelectItem key={vs.value} value={vs.value}>
+                                {vs.label}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -339,17 +431,7 @@ const EditAdmin = () => {
                     )}
                   />
                 </div>
-
-                {/* File upload (optional) */}
-                <div>
-                  <FormLabel>Update Photo</FormLabel>
-                  <Input type="file" className="mt-1" />
-                </div>
-
-                <div className="flex justify-end space-x-4">
-                  <Button type="button" variant="outline" onClick={() => navigate("/superadmin/admins")}>Cancel</Button>
-                  <Button type="submit">Save Changes</Button>
-                </div>
+                <Button type="submit">Save Changes</Button>
               </form>
             </Form>
           </CardContent>

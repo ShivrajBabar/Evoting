@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 const SuperadminCandidates = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
-  
+
   const [electionFilter, setElectionFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -59,14 +59,14 @@ const SuperadminCandidates = () => {
   }, []);
 
   const filteredCandidates = candidates.filter(candidate => {
-    const matchesSearch = searchQuery === '' || 
-      candidate.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    const matchesSearch = searchQuery === '' ||
+      candidate.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       candidate.party.toLowerCase().includes(searchQuery.toLowerCase()) ||
       candidate.constituency_name.toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     const matchesElection = electionFilter === 'all' || candidate.election_type === electionFilter;
     const matchesStatus = statusFilter === 'all' || candidate.status === statusFilter;
-    
+
     return matchesSearch && matchesElection && matchesStatus;
   });
 
@@ -76,47 +76,69 @@ const SuperadminCandidates = () => {
     navigate(`/superadmin/candidates/edit/${id}`);
   };
 
-  const handleDeleteCandidate = (id) => {
-    toast({
-      title: "Delete Candidate",
-      description: `Deleting candidate with ID: ${id}`,
-    });
+  const handleDeleteCandidate = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this candidate?')) return;
+
+    try {
+      const res = await fetch(`/api/candidates/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to delete candidate');
+      }
+
+      // Remove candidate from local state
+      setCandidates(prev => prev.filter(candidate => candidate.id !== id));
+
+      toast({
+        title: "Candidate Deleted",
+        description: `Candidate with ID ${id} has been removed.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
   };
 
-  
+
+
 
   const updateCandidateStatus = async (id, newStatus) => {
-  try {
-    const res = await fetch(`/api/candidates/${id}/status`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ status: newStatus })
-    });
+    try {
+      const res = await fetch(`/api/candidates/${id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
 
-    if (!res.ok) {
-      throw new Error('Failed to update status');
+      if (!res.ok) {
+        throw new Error('Failed to update status');
+      }
+
+      setCandidates(prev =>
+        prev.map(candidate =>
+          candidate.id === id ? { ...candidate, status: newStatus } : candidate
+        )
+      );
+
+      toast({
+        title: "Status Updated",
+        description: `Candidate status changed to ${newStatus}`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: 'destructive',
+      });
     }
-
-    setCandidates(prev =>
-      prev.map(candidate =>
-        candidate.id === id ? { ...candidate, status: newStatus } : candidate
-      )
-    );
-
-    toast({
-      title: "Status Updated",
-      description: `Candidate status changed to ${newStatus}`,
-    });
-  } catch (error) {
-    toast({
-      title: "Error",
-      description: error.message,
-      variant: 'destructive',
-    });
-  }
-};
+  };
 
 
   return (
@@ -142,7 +164,7 @@ const SuperadminCandidates = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          
+
           <div className="w-full sm:w-64">
             <Select value={electionFilter} onValueChange={setElectionFilter}>
               <SelectTrigger>
@@ -156,7 +178,7 @@ const SuperadminCandidates = () => {
               </SelectContent>
             </Select>
           </div>
-          
+
           <div className="w-full sm:w-48">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger>
@@ -201,11 +223,11 @@ const SuperadminCandidates = () => {
                       <td className="px-6 py-4">
                         <Popover>
                           <PopoverTrigger asChild>
-                            <span 
+                            <span
                               className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium cursor-pointer
-                                ${candidate.status === 'Approved' ? 'bg-green-100 text-green-800' : 
-                                candidate.status === 'Rejected' ? 'bg-red-100 text-red-800' : 
-                                'bg-yellow-100 text-yellow-800'}` }
+                                ${candidate.status === 'Approved' ? 'bg-green-100 text-green-800' :
+                                  candidate.status === 'Rejected' ? 'bg-red-100 text-red-800' :
+                                    'bg-yellow-100 text-yellow-800'}`}
                             >
                               {candidate.status}
                             </span>
@@ -216,24 +238,24 @@ const SuperadminCandidates = () => {
                               <div className="space-y-2">
                                 <div className="flex items-center justify-between">
                                   <Label htmlFor={`approved-${candidate.id}`}>Approved</Label>
-                                  <Switch 
-                                    id={`approved-${candidate.id}`} 
+                                  <Switch
+                                    id={`approved-${candidate.id}`}
                                     checked={candidate.status === 'Approved'}
                                     onCheckedChange={() => updateCandidateStatus(candidate.id, 'Approved')}
                                   />
                                 </div>
                                 <div className="flex items-center justify-between">
                                   <Label htmlFor={`pending-${candidate.id}`}>Pending</Label>
-                                  <Switch 
-                                    id={`pending-${candidate.id}`} 
+                                  <Switch
+                                    id={`pending-${candidate.id}`}
                                     checked={candidate.status === 'Pending'}
                                     onCheckedChange={() => updateCandidateStatus(candidate.id, 'Pending')}
                                   />
                                 </div>
                                 <div className="flex items-center justify-between">
                                   <Label htmlFor={`rejected-${candidate.id}`}>Rejected</Label>
-                                  <Switch 
-                                    id={`rejected-${candidate.id}`} 
+                                  <Switch
+                                    id={`rejected-${candidate.id}`}
                                     checked={candidate.status === 'Rejected'}
                                     onCheckedChange={() => updateCandidateStatus(candidate.id, 'Rejected')}
                                   />
@@ -257,7 +279,7 @@ const SuperadminCandidates = () => {
                   ))}
                 </tbody>
               </table>
-              
+
               {filteredCandidates.length === 0 && (
                 <div className="py-8 text-center text-gray-500">
                   No candidates match your search criteria

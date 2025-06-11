@@ -322,6 +322,197 @@ app.get('/api/admins', async (req, res) => {
   }
 });
 
+app.get('/api/admins/users/:id', async (req, res) => {
+  const userId = req.params.id;
+  console.log(`👉 Incoming request to get admin with user ID ${userId}`);
+
+  try {
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+
+    // Fetch admin details by joining users and admins tables only
+    const [rows] = await pool.query(
+      `SELECT u.id AS user_id, u.name, u.email, u.phone, u.dob, u.photo_name, u.status,
+              a.state_id, a.district_id, a.constituency_id
+       FROM users u
+       INNER JOIN admins a ON u.id = a.user_id
+       WHERE u.id = ?`,
+      [userId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Admin not found' });
+    }
+
+    const admin = rows[0];
+
+    res.json({
+      userId: admin.user_id,
+      name: admin.name,
+      email: admin.email,
+      phone: admin.phone,
+      dob: admin.dob,
+      photo_name: admin.photo_name,
+      status: admin.status,
+      state_id: admin.state_id,
+      district_id: admin.district_id,
+      constituency_id: admin.constituency_id
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching admin:', error);
+    res.status(500).json({ error: 'Failed to fetch admin', details: error.message });
+  }
+});
+
+app.put('/api/admins/:id', upload.single('photo'), async (req, res) => {
+  const userId = req.params.id;
+  console.log("✏️ Updating admin:", userId);
+
+  try {
+    const {
+      name,
+      email,
+      phone,
+      dob,
+      state_id,
+      district_id,
+      constituency_id
+    } = req.body;
+
+    const newPhoto = req.file ? req.file.filename : null;
+
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    try {
+      // Fetch existing photo to delete if replaced
+      const [[existingUser]] = await connection.query(
+        'SELECT photo_name FROM users WHERE id = ?',
+        [userId]
+      );
+
+      if (!existingUser) {
+        await connection.rollback();
+        connection.release();
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      // Update user info
+      await connection.query(
+        `UPDATE users 
+         SET name = ?, email = ?, phone = ?, dob = ?, photo_name = COALESCE(?, photo_name) 
+         WHERE id = ?`,
+        [name, email, phone, dob || null, newPhoto, userId]
+      );
+
+      // Update admin info
+      await connection.query(
+        `UPDATE admins 
+         SET state_id = ?, district_id = ?, constituency_id = ? 
+         WHERE user_id = ?`,
+        [state_id, district_id, constituency_id, userId]
+      );
+
+      await connection.commit();
+      connection.release();
+
+      // Delete old photo if a new one was uploaded
+      if (newPhoto && existingUser.photo_name && existingUser.photo_name !== newPhoto) {
+        const oldPath = path.join(photoDir, existingUser.photo_name);
+        fs.unlink(oldPath, (err) => {
+          if (err) console.error("🧨 Failed to delete old photo:", err);
+        });
+      }
+
+      console.log("✅ Admin updated successfully");
+      res.status(200).json({ message: "Admin updated successfully" });
+
+    } catch (error) {
+      await connection.rollback();
+      connection.release();
+      throw error;
+    }
+
+  } catch (error) {
+    console.error("❌ Error updating admin:", error);
+
+    // Delete new photo if update fails
+    if (req.file) {
+      fs.unlink(path.join(photoDir, req.file.filename), (err) => {
+        if (err) console.error("Failed to clean up new photo:", err);
+      });
+    }
+
+    res.status(500).json({
+      error: "Failed to update admin",
+      details: error.message
+    });
+  }
+});
+
+app.delete('/api/admins/:id', async (req, res) => {
+  const adminId = req.params.id;
+
+  console.log('➡️ DELETE /api/admins/:id');
+  console.log('🧾 Admin ID:', adminId);
+
+  try {
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    // Get user_id and photo_name from the admin record
+    const [adminRows] = await connection.query(
+      `SELECT u.id AS user_id, u.photo_name
+       FROM admins a
+       JOIN users u ON a.user_id = u.id
+       WHERE a.id = ?`,
+      [adminId]
+    );
+
+    if (!adminRows || adminRows.length === 0) {
+      console.warn('❌ Admin not found for ID:', adminId);
+      connection.release();
+      return res.status(404).json({ error: 'Admin not found' });
+    }
+
+    const { user_id, photo_name } = adminRows[0];
+    console.log('🆔 Found user_id:', user_id);
+    console.log('🖼️ Found photo_name:', photo_name);
+
+    // Delete from admins table
+    await connection.query('DELETE FROM admins WHERE id = ?', [adminId]);
+
+    // Delete from users table
+    await connection.query('DELETE FROM users WHERE id = ?', [user_id]);
+
+    await connection.commit();
+    connection.release();
+
+    // Delete uploaded photo from disk if exists
+    if (photo_name) {
+      const photoPath = path.join(photoDir, photo_name);
+      fs.unlink(photoPath, (err) => {
+        if (err) {
+          console.error('⚠️ Error deleting photo file:', err);
+        } else {
+          console.log('🗑️ Photo file deleted:', photo_name);
+        }
+      });
+    }
+
+    res.json({ message: 'Admin deleted successfully' });
+  } catch (error) {
+    console.error('❌ Error deleting admin:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+
+
+
+
 
 // PATCH /api/admins/:id/status
 app.patch('/api/admins/:id/status', async (req, res) => {
@@ -420,6 +611,31 @@ app.post('/api/candidates', upload.fields([
     res.status(500).json({ error: 'Failed to register candidate', details: error.message });
   }
 });
+
+app.delete('/api/candidates/:id', async (req, res) => {
+  const candidateId = req.params.id;
+
+  try {
+    // Delete votes for this candidate
+    await query({
+      query: 'DELETE FROM votes WHERE candidate_id = ?',
+      values: [candidateId],
+    });
+
+    // Now delete the candidate
+    await query({
+      query: 'DELETE FROM candidates WHERE id = ?',
+      values: [candidateId],
+    });
+
+    res.json({ message: `Candidate with ID ${candidateId} and related votes deleted.` });
+  } catch (error) {
+    console.error('Error deleting candidate:', error);
+    res.status(500).json({ error: 'Failed to delete candidate', details: error.message });
+  }
+});
+
+
 
 
 
@@ -922,6 +1138,109 @@ app.get('/api/elections', async (req, res) => {
     console.error('Error fetching elections:', error);
     res.status(500).json({
       error: 'Failed to fetch elections',
+      details: error.message
+    });
+  }
+});
+
+app.get('/api/elections/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const elections = await query({
+      query: `
+        SELECT 
+          e.id, 
+          e.name, 
+          e.type, 
+          e.status, 
+          e.election_date AS date,
+          e.application_start_date AS applicationStartDate,
+          e.application_end_date AS applicationEndDate,
+          e.result_date AS resultDate,
+          e.state_id AS state,
+          e.district_id AS district,
+          e.loksabha_id AS loksabha,
+          e.vidhansabha_id AS vidhansabha,
+          e.local_body_id AS localBody,
+          e.description,
+          e.result,
+          s.name AS stateName,
+          d.name AS districtName
+        FROM elections e
+        LEFT JOIN states s ON e.state_id = s.id
+        LEFT JOIN districts d ON e.district_id = d.id
+        WHERE e.id = ?
+      `,
+      values: [id]
+    });
+
+    if (elections.length === 0) {
+      return res.status(404).json({ error: 'Election not found' });
+    }
+
+    res.status(200).json(elections[0]);
+  } catch (error) {
+    console.error('Error fetching election by ID:', error);
+    res.status(500).json({
+      error: 'Failed to fetch election',
+      details: error.message
+    });
+  }
+});
+
+
+app.put('/api/elections/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    // Validate required fields (optional: you can also allow partial updates by skipping this)
+    if (
+      !req.body.name ||
+      !req.body.type ||
+      !req.body.status ||
+      !req.body.date ||
+      !req.body.applicationStartDate ||
+      !req.body.applicationEndDate
+    ) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const result = await query({
+      query: `
+        UPDATE elections SET
+          name = ?, type = ?, status = ?, election_date = ?, application_start_date = ?, application_end_date = ?,
+          result_date = ?, state_id = ?, district_id = ?, loksabha_id = ?, vidhansabha_id = ?, local_body_id = ?,
+          description = ?, result = ?
+        WHERE id = ?`,
+      values: [
+        req.body.name,
+        req.body.type,
+        req.body.status,
+        req.body.date,
+        req.body.applicationStartDate,
+        req.body.applicationEndDate,
+        req.body.resultDate || null,
+        req.body.state || null,
+        req.body.district || null,
+        req.body.loksabha || null,
+        req.body.vidhansabha || null,
+        req.body.localBody || null,
+        req.body.description || null,
+        req.body.result || "No",  // You can update the result field here or keep default "No"
+        id
+      ]
+    });
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Election not found' });
+    }
+
+    res.json({ message: 'Election updated successfully' });
+  } catch (error) {
+    console.error('Error updating election:', error);
+    res.status(500).json({
+      error: 'Failed to update election',
       details: error.message
     });
   }
