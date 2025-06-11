@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -10,173 +9,314 @@ import Layout from '@/components/Layout';
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
-  Form, 
-  FormControl, 
-  FormField, 
-  FormItem, 
-  FormLabel, 
-  FormMessage 
+import { useLocation } from 'react-router-dom';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage
 } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { 
-  allLoksabhas, 
-  allVidhansabhas, 
-  allLocalBodies, 
-  allWards, 
-  allBooths, 
-  getOptionsForDropdown 
-} from '@/utils/locationData';
+
+type Option = { value: string; label: string };
 
 const formSchema = z.object({
-  name: z.string().min(2, {
-    message: "Name must be at least 2 characters.",
-  }),
-  email: z.string().email({
-    message: "Please enter a valid email address.",
-  }),
-  phone: z.string().min(10, {
-    message: "Phone number must be at least 10 digits.",
-  }),
-  voter_id: z.string().min(10, {
-    message: "Voter ID must be at least 10 characters.",
-  }),
-  dob: z.string(),
-  state: z.string(),
-  district: z.string(),
-  loksabhaWard: z.string(),
-  vidhansabhaWard: z.string(),
-  localbody: z.string(),
-  ward: z.string(),
-  booth: z.string(),
+  name: z.string().min(1, "Name is required"),
+  email: z.string().email("Invalid email"),
+  phone: z.string().min(10, "Phone number is required"),
+  voter_id: z.string().min(1, "Voter ID is required"),
+  dob: z.string().min(1, "Date of Birth is required"),
+  state: z.string().min(1, "State is required"),
+  district: z.string().min(1, "District is required"),
+  loksabhaWard: z.string().min(1, "Lok Sabha is required"),
+  vidhansabhaWard: z.string().min(1, "Vidhan Sabha is required"),
+  localbody: z.string().min(1, "Local Body is required"),
+  ward: z.string().min(1, "Ward is required"),
+  booth: z.string().min(1, "Booth is required")
 });
 
 const EditVoter = () => {
   const { id } = useParams();
+  const { state: locationState } = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
 
-  // States for dependent dropdowns
-  const [loksabhas, setLoksabhas] = useState<string[]>([]);
-  const [vidhansabhas, setVidhansabhas] = useState<string[]>([]);
-  const [localbodies, setLocalbodies] = useState<string[]>([]);
-  const [wards, setWards] = useState<string[]>([]);
-  const [booths, setBooths] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [initialData, setInitialData] = useState<any>(locationState || null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Mock voter data (would come from API)
-  const voterData = {
-    id: parseInt(id || "1"),
-    name: "Aditya Sharma",
-    email: "aditya@example.com",
-    phone: "9876543210",
-    voter_id: "MH0123456789",
-    dob: "1990-05-15",
-    state: "Maharashtra",
-    district: "Mumbai",
-    loksabhaWard: "Mumbai North",
-    vidhansabhaWard: "Borivali",
-    localbody: "Borivali Municipal Corp",
-    ward: "Ward 1",
-    booth: "Booth #101",
-  };
+  // States for dependent dropdowns
+  const [states, setStates] = useState<Option[]>([]);
+  const [districts, setDistricts] = useState<Option[]>([]);
+  const [vidhansabhas, setVidhansabhas] = useState<Option[]>([]);
+  const [loksabhas, setLoksabhas] = useState<Option[]>([]);
+  const [localbodies, setLocalbodies] = useState<Option[]>([]);
+  const [wards, setWards] = useState<Option[]>([]);
+  const [booths, setBooths] = useState<Option[]>([]);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: voterData,
+    defaultValues: {
+      name: '',
+      email: '',
+      phone: '',
+      voter_id: '',
+      dob: '',
+      state: user?.state_id?.toString() || '',
+      district: user?.district_id?.toString() || '',
+      loksabhaWard: '',
+      vidhansabhaWard: '',
+      localbody: '',
+      ward: '',
+      booth: ''
+    }
   });
 
-  // Set up initial dropdown values based on voter data
+  // Fetch if voter data not passed from route
   useEffect(() => {
-    // Initialize Lok Sabha constituencies
-    if (voterData.district) {
-      const newLoksabhas = getOptionsForDropdown(allLoksabhas, voterData.district);
-      setLoksabhas(newLoksabhas);
-    }
+    const fetchVoter = async () => {
+      try {
+        const res = await fetch(`http://localhost:3000/api/voters/user/${id}`);
+        if (!res.ok) throw new Error("Failed to fetch voter");
+        const data = await res.json();
+        setInitialData(data);
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to load voter data.",
+          variant: "destructive"
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    // Initialize Vidhan Sabha constituencies
-    if (voterData.loksabhaWard) {
-      const newVidhansabhas = getOptionsForDropdown(allVidhansabhas, voterData.loksabhaWard);
-      setVidhansabhas(newVidhansabhas);
-    }
+    if (!locationState && id) fetchVoter();
+    else setLoading(false);
+  }, [id, locationState, toast]);
 
-    // Initialize Local Bodies
-    if (voterData.vidhansabhaWard) {
-      const newLocalbodies = getOptionsForDropdown(allLocalBodies, voterData.vidhansabhaWard);
-      setLocalbodies(newLocalbodies);
-    }
+  // Preload dropdown values
+  useEffect(() => {
+    const preloadDropdownValues = async () => {
+      try {
+        // Fetch and set States
+        const statesRes = await fetch('http://localhost:3000/api/states');
+        const allStates = await statesRes.json();
+        const stateOptions = allStates.map((s: any) => ({ value: s.id.toString(), label: s.name }));
+        setStates(stateOptions);
 
-    // Initialize Wards
-    if (voterData.localbody) {
-      const newWards = getOptionsForDropdown(allWards, voterData.localbody);
-      setWards(newWards);
-    }
+        // Fetch and set Districts
+        const districtsRes = await fetch(`http://localhost:3000/api/districts?state_id=${user?.state_id}`);
+        const allDistricts = await districtsRes.json();
+        const districtOptions = allDistricts.map((d: any) => ({ value: d.id.toString(), label: d.name }));
+        setDistricts(districtOptions);
 
-    // Initialize Booths
-    if (voterData.ward) {
-      const newBooths = getOptionsForDropdown(allBooths, voterData.ward);
-      setBooths(newBooths);
-    }
-  }, [voterData]);
+        // Fetch and set Vidhan Sabhas
+        const vidhansabhaRes = await fetch(
+          `http://localhost:3000/api/constituencies?district_id=${user?.district_id}&type=vidhansabha`
+        );
+        const allVidhanSabhas = await vidhansabhaRes.json();
+        const vidhansabhaOptions = allVidhanSabhas.map((v: any) => ({ value: v.id.toString(), label: v.name }));
+        setVidhansabhas(vidhansabhaOptions);
 
-  // Handle loksabha change to update vidhansabha dropdown
-  const handleLoksabhaChange = (loksabha: string) => {
-    form.setValue("loksabhaWard", loksabha);
-    form.setValue("vidhansabhaWard", "");
-    form.setValue("localbody", "");
-    form.setValue("ward", "");
-    form.setValue("booth", "");
-    
-    const newVidhansabhas = getOptionsForDropdown(allVidhansabhas, loksabha);
-    setVidhansabhas(newVidhansabhas);
-    setLocalbodies([]);
-    setWards([]);
-    setBooths([]);
+        // Fetch and set Lok Sabhas
+        const loksabhaRes = await fetch(
+          `http://localhost:3000/api/constituencies?state_id=${user?.state_id}&type=loksabha`
+        );
+        const allLokSabhas = await loksabhaRes.json();
+        const loksabhaOptions = allLokSabhas.map((l: any) => ({ value: l.id.toString(), label: l.name }));
+        setLoksabhas(loksabhaOptions);
+
+        // Fetch and set Local Bodies
+        const localBodiesRes = await fetch(
+          `http://localhost:3000/api/local-bodies?district_id=${user?.district_id}`
+        );
+        const allLocalBodies = await localBodiesRes.json();
+        const localbodyOptions = allLocalBodies.map((lb: any) => ({ value: lb.id.toString(), label: lb.name }));
+        setLocalbodies(localbodyOptions);
+
+        // Match names to IDs
+        const findIdByName = (options: Option[], name: string) =>
+          options.find((opt) => opt.label === name)?.value || '';
+
+        const matchedLoksabhaId = findIdByName(loksabhaOptions, initialData?.loksabha_name);
+        const matchedVidhansabhaId = findIdByName(vidhansabhaOptions, initialData?.vidhansabha_name);
+        const matchedLocalbodyId = findIdByName(localbodyOptions, initialData?.municipal_corp_name);
+
+        let wardOptions: Option[] = [];
+        let boothOptions: Option[] = [];
+
+        // Fetch wards if local body matched
+        if (matchedLocalbodyId) {
+          const wardsRes = await fetch(`http://localhost:3000/api/wards?local_body_id=${matchedLocalbodyId}`);
+          const allWards = await wardsRes.json();
+          wardOptions = allWards.map((w: any) => ({ value: w.id.toString(), label: w.name }));
+          setWards(wardOptions);
+        }
+
+        const matchedWardId = findIdByName(wardOptions, initialData?.ward_name);
+
+        // Fetch booths if ward matched
+        if (matchedWardId) {
+          const boothsRes = await fetch(`http://localhost:3000/api/booths?ward_id=${matchedWardId}`);
+          const allBooths = await boothsRes.json();
+          boothOptions = allBooths.map((b: any) => ({ value: b.id.toString(), label: b.name }));
+          setBooths(boothOptions);
+        }
+
+        const matchedBoothId = findIdByName(boothOptions, initialData?.booth_name);
+
+        // ✅ Reset form with matched IDs
+        form.reset({
+          name: initialData.name || '',
+          email: initialData.email || '',
+          phone: initialData.phone || '',
+          voter_id: initialData.voter_card_number || '',
+          dob: initialData.dob?.split('T')[0] || '',
+          state: user?.state_id?.toString() || '',
+          district: user?.district_id?.toString() || '',
+          loksabhaWard: matchedLoksabhaId,
+          vidhansabhaWard: matchedVidhansabhaId,
+          localbody: matchedLocalbodyId,
+          ward: matchedWardId,
+          booth: matchedBoothId
+        });
+
+        console.log("Final Voter Form Data:", {
+          ...initialData,
+          loksabhaWard: matchedLoksabhaId,
+          vidhansabhaWard: matchedVidhansabhaId,
+          localbody: matchedLocalbodyId,
+          ward: matchedWardId,
+          booth: matchedBoothId,
+          photoURL: initialData?.photo_name ? `/uploads/${initialData.photo_name}` : ''
+        });
+
+      } catch (err) {
+        console.error("Dropdown preload error:", err);
+      }
+    };
+
+    if (initialData && user?.state_id && user?.district_id) {
+      preloadDropdownValues();
+    }
+  }, [initialData, user, form]);
+
+
+  useEffect(() => {
+    if (initialData) {
+      console.log("Loaded Voter Data:", initialData);
+      form.reset({
+        name: initialData.name || '',
+        email: initialData.email || '',
+        phone: initialData.phone || '',
+        voter_id: initialData.voter_card_number || '',
+        dob: initialData.dob?.split('T')[0] || '',
+        state: user?.state_id?.toString() || '',
+        district: user?.district_id?.toString() || '',
+        loksabhaWard: initialData.loksabha_ward_id?.toString() || '',
+        vidhansabhaWard: initialData.vidhansabha_ward_id?.toString() || '',
+        localbody: initialData.municipal_corp_id?.toString() || '',
+        ward: initialData.municipal_corp_ward_id?.toString() || '',
+        booth: initialData.booth_id?.toString() || ''
+      });
+    }
+  }, [initialData, form, user]);
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setPhotoFile(e.target.files[0]);
+    }
   };
 
-  // Handle vidhansabha change to update localbody dropdown
-  const handleVidhansabhaChange = (vidhansabha: string) => {
-    form.setValue("vidhansabhaWard", vidhansabha);
-    form.setValue("localbody", "");
-    form.setValue("ward", "");
-    form.setValue("booth", "");
-    
-    const newLocalbodies = getOptionsForDropdown(allLocalBodies, vidhansabha);
-    setLocalbodies(newLocalbodies);
-    setWards([]);
-    setBooths([]);
+  const handleLocalbodyChange = async (localBodyId: string) => {
+    try {
+      const res = await fetch(`http://localhost:3000/api/wards?local_body_id=${localBodyId}`);
+      const data = await res.json();
+      const options = data.map((ward: any) => ({
+        value: ward.id.toString(),
+        label: ward.name
+      }));
+      setWards(options);
+      form.setValue("localbody", localBodyId);
+      form.setValue("ward", "");
+      setBooths([]);
+    } catch (error) {
+      console.error("Error fetching wards:", error);
+    }
   };
 
-  // Handle localbody change to update ward dropdown
-  const handleLocalbodyChange = (localbody: string) => {
-    form.setValue("localbody", localbody);
-    form.setValue("ward", "");
-    form.setValue("booth", "");
-    
-    const newWards = getOptionsForDropdown(allWards, localbody);
-    setWards(newWards);
-    setBooths([]);
+  const handleWardChange = async (wardId: string) => {
+    try {
+      const res = await fetch(`http://localhost:3000/api/booths?ward_id=${wardId}`);
+      const data = await res.json();
+      const options = data.map((booth: any) => ({
+        value: booth.id.toString(),
+        label: booth.name
+      }));
+      setBooths(options);
+      form.setValue("ward", wardId);
+      form.setValue("booth", "");
+    } catch (error) {
+      console.error("Error fetching booths:", error);
+    }
   };
 
-  // Handle ward change to update booth dropdown
-  const handleWardChange = (ward: string) => {
-    form.setValue("ward", ward);
-    form.setValue("booth", "");
-    
-    const newBooths = getOptionsForDropdown(allBooths, ward);
-    setBooths(newBooths);
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    setIsSubmitting(true);
+    try {
+      const formData = new FormData();
+
+      // Append all form values
+      Object.entries(values).forEach(([key, value]) => {
+        if (value) formData.append(key, value);
+      });
+
+      // Append photo file if exists
+      if (photoFile) {
+        formData.append('photo', photoFile);
+      }
+
+      const response = await fetch(`http://localhost:3000/api/voters/${id}`, {
+        method: 'PUT',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to update voter');
+        } else {
+          const errorText = await response.text();
+          throw new Error("Non-JSON error: " + errorText);
+        }
+      }
+
+      toast({
+        title: "Success",
+        description: "Voter details updated successfully.",
+      });
+
+      navigate('/admin/voters');
+    } catch (error) {
+      console.error("Update error:", error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : 'Failed to update voter',
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    // In a real application, this would send data to a backend API
-    console.log(values);
-    toast({
-      title: "Voter Updated",
-      description: `${values.name}'s information has been updated successfully.`,
-    });
-    navigate('/admin/voters');
-  }
+  if (loading) return <Layout><div className="p-6">Loading voter data...</div></Layout>;
 
   return (
     <Layout>
@@ -190,12 +330,21 @@ const EditVoter = () => {
           <CardHeader>
             <div className="flex items-center space-x-4">
               <Avatar className="h-20 w-20">
-                <AvatarImage src="/placeholder.svg" alt={voterData.name} />
-                <AvatarFallback>{voterData.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+                <AvatarImage
+                  src={
+                    initialData?.photo_name
+                      ? `http://localhost:3000/api/voters/photo/${initialData.photo_name}`
+                      : "/placeholder.svg"
+                  }
+                  alt={initialData?.name}
+                />
+
+
+                <AvatarFallback>{initialData?.name?.substring(0, 2).toUpperCase()}</AvatarFallback>
               </Avatar>
               <div>
-                <CardTitle>{voterData.name}</CardTitle>
-                <CardDescription>Voter ID: {voterData.voter_id}</CardDescription>
+                <CardTitle>{initialData?.name}</CardTitle>
+                <CardDescription>Voter ID: {initialData?.voter_card_number}</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -279,9 +428,20 @@ const EditVoter = () => {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>State*</FormLabel>
-                        <FormControl>
-                          <Input value={user?.state || field.value} readOnly {...field} />
-                        </FormControl>
+                        <Select value={field.value} disabled>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select State" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {states.map((state) => (
+                              <SelectItem key={state.value} value={state.value}>
+                                {state.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -293,9 +453,20 @@ const EditVoter = () => {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>District*</FormLabel>
-                        <FormControl>
-                          <Input value={user?.district || field.value} readOnly {...field} />
-                        </FormControl>
+                        <Select value={field.value} disabled>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select District" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {districts.map((district) => (
+                              <SelectItem key={district.value} value={district.value}>
+                                {district.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -307,9 +478,9 @@ const EditVoter = () => {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Lok Sabha Constituency*</FormLabel>
-                        <Select 
-                          onValueChange={(value) => handleLoksabhaChange(value)} 
-                          defaultValue={field.value}
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -318,7 +489,9 @@ const EditVoter = () => {
                           </FormControl>
                           <SelectContent>
                             {loksabhas.map((loksabha) => (
-                              <SelectItem key={loksabha} value={loksabha}>{loksabha}</SelectItem>
+                              <SelectItem key={loksabha.value} value={loksabha.value}>
+                                {loksabha.label}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -332,20 +505,21 @@ const EditVoter = () => {
                     name="vidhansabhaWard"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Vidhan Sabha Constituency*</FormLabel>
-                        <Select 
-                          onValueChange={(value) => handleVidhansabhaChange(value)} 
-                          defaultValue={field.value}
-                          disabled={vidhansabhas.length === 0}
+                        <FormLabel>Vidhan Sabha*</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value} disabled
                         >
                           <FormControl>
                             <SelectTrigger>
-                              <SelectValue placeholder="Select Vidhan Sabha constituency" />
+                              <SelectValue placeholder="Select Vidhan Sabha" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {vidhansabhas.map((vidhansabha) => (
-                              <SelectItem key={vidhansabha} value={vidhansabha}>{vidhansabha}</SelectItem>
+                            {vidhansabhas.map((vs) => (
+                              <SelectItem key={vs.value} value={vs.value}>
+                                {vs.label}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -360,9 +534,12 @@ const EditVoter = () => {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Local Body*</FormLabel>
-                        <Select 
-                          onValueChange={(value) => handleLocalbodyChange(value)} 
-                          defaultValue={field.value}
+                        <Select
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            handleLocalbodyChange(value);
+                          }}
+                          value={field.value}
                           disabled={localbodies.length === 0}
                         >
                           <FormControl>
@@ -372,7 +549,9 @@ const EditVoter = () => {
                           </FormControl>
                           <SelectContent>
                             {localbodies.map((localbody) => (
-                              <SelectItem key={localbody} value={localbody}>{localbody}</SelectItem>
+                              <SelectItem key={localbody.value} value={localbody.value}>
+                                {localbody.label}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -387,9 +566,12 @@ const EditVoter = () => {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Ward*</FormLabel>
-                        <Select 
-                          onValueChange={(value) => handleWardChange(value)} 
-                          defaultValue={field.value}
+                        <Select
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            handleWardChange(value);
+                          }}
+                          value={field.value}
                           disabled={wards.length === 0}
                         >
                           <FormControl>
@@ -399,7 +581,9 @@ const EditVoter = () => {
                           </FormControl>
                           <SelectContent>
                             {wards.map((ward) => (
-                              <SelectItem key={ward} value={ward}>{ward}</SelectItem>
+                              <SelectItem key={ward.value} value={ward.value}>
+                                {ward.label}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -414,9 +598,9 @@ const EditVoter = () => {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Booth*</FormLabel>
-                        <Select 
-                          onValueChange={field.onChange} 
-                          defaultValue={field.value}
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value}
                           disabled={booths.length === 0}
                         >
                           <FormControl>
@@ -426,7 +610,9 @@ const EditVoter = () => {
                           </FormControl>
                           <SelectContent>
                             {booths.map((booth) => (
-                              <SelectItem key={booth} value={booth}>{booth}</SelectItem>
+                              <SelectItem key={booth.value} value={booth.value}>
+                                {booth.label}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -438,14 +624,26 @@ const EditVoter = () => {
 
                 <div>
                   <FormLabel>Update Photo</FormLabel>
-                  <Input type="file" className="mt-1" />
+                  <Input
+                    type="file"
+                    className="mt-1"
+                    onChange={handlePhotoChange}
+                    accept="image/*"
+                  />
                 </div>
 
                 <div className="flex justify-end space-x-4">
-                  <Button type="button" variant="outline" onClick={() => navigate('/admin/voters')}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => navigate('/admin/voters')}
+                    disabled={isSubmitting}
+                  >
                     Cancel
                   </Button>
-                  <Button type="submit">Save Changes</Button>
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? "Updating..." : "Save Changes"}
+                  </Button>
                 </div>
               </form>
             </Form>

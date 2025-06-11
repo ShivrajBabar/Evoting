@@ -12,7 +12,6 @@ const SuperadminDashboard = () => {
     { name: 'Total Candidates', value: '0', icon: <Vote className="h-8 w-8 text-blue-500" /> },
     { name: 'Total Admins', value: '0', icon: <Users className="h-8 w-8 text-green-500" /> },
     { name: 'Active Elections', value: '0', icon: <Landmark className="h-8 w-8 text-purple-500" /> },
-    { name: 'Total Votes Cast', value: '0', icon: <BarChart className="h-8 w-8 text-orange-500" /> },
   ]);
   const [upcomingElections, setUpcomingElections] = useState([]);
   const [recentActivities, setRecentActivities] = useState([]);
@@ -45,7 +44,6 @@ const SuperadminDashboard = () => {
             value: electionsData.filter(e => e.status?.toLowerCase() === 'active').length.toString(),
             icon: <Landmark className="h-8 w-8 text-purple-500" />
           },
-          { name: 'Total Votes Cast', value: '0', icon: <BarChart className="h-8 w-8 text-orange-500" /> }, // Placeholder
         ]);
 
 

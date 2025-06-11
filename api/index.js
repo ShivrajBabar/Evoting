@@ -636,6 +636,20 @@ app.post('/api/voters', upload.single('photo'), async (req, res) => {
 });
 
 
+app.get('/api/voters/photo/:filename', (req, res) => {
+  const filename = req.params.filename;
+  const filePath = path.join(__dirname, 'uploads', filename);
+
+  fs.access(filePath, fs.constants.F_OK, (err) => {
+    if (err) {
+      return res.status(404).send('Image not found');
+    }
+
+    res.sendFile(filePath);
+  });
+});
+
+
 // GET all voters
 app.get('/api/voters', async (req, res) => {
   console.log("📥 GET request to /api/voters");
@@ -671,9 +685,9 @@ app.get('/api/voters', async (req, res) => {
   }
 });
 
-app.get('/api/voters/:id', async (req, res) => {
-  const userId = req.params.id;
-  console.log(`📥 GET /api/voters/${userId}`);
+app.get('/api/voters/user/:id', async (req, res) => {
+  const id = req.params.id;
+  console.log(`📥 GET /api/voters/user/${id}`);
 
   try {
     const [voter] = await pool.query(`
@@ -686,7 +700,11 @@ app.get('/api/voters/:id', async (req, res) => {
         u.status,
         u.photo_name,
 
+        v.id AS voter_id,
         v.voter_id AS voter_card_number,
+
+        v.state_id, v.district_id, v.loksabha_ward_id, v.vidhansabha_ward_id,
+        v.municipal_corp_id, v.municipal_corp_ward_id, v.booth_id,
 
         s.name AS state_name,
         d.name AS district_name,
@@ -707,9 +725,9 @@ app.get('/api/voters/:id', async (req, res) => {
       LEFT JOIN wards mw ON v.municipal_corp_ward_id = mw.id
       LEFT JOIN booths b ON v.booth_id = b.id
 
-      WHERE u.id = ?
+      WHERE v.id = ?
       LIMIT 1
-    `, [userId]);
+    `, [id]);
 
     if (!voter || voter.length === 0) {
       return res.status(404).json({ error: 'Voter not found' });
@@ -717,10 +735,13 @@ app.get('/api/voters/:id', async (req, res) => {
 
     res.json(voter[0]);
   } catch (error) {
-    console.error("❌ Error fetching voter by ID:", error);
+    console.error("❌ Error fetching voter by id:", error);
     res.status(500).json({ error: 'Failed to fetch voter', details: error.message });
   }
 });
+
+
+
 
 
 // 10. Get admin by ID
