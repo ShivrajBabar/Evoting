@@ -151,32 +151,34 @@ const VoterElections = () => {
         {elections.filter(e => e.status === 'Active').length > 0 && (
           <div className="space-y-4">
             <h2 className="text-xl font-semibold">Active Elections</h2>
-            {elections.filter(e => e.status === 'Active').map(election => (
-              <Card key={election.id} className="border-l-4 border-green-500">
-                <CardHeader>
-                  <div className="flex justify-between items-start">
-                    <CardTitle>{election.name}</CardTitle>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                      {election.status}
-                    </span>
-                  </div>
-                  <CardDescription>Ends today at {election.endTime || '5:00 PM'}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-gray-500 mb-4">{election.description}</p>
-                  <div className="flex items-center text-sm mb-6">
-                    <Calendar className="mr-2 h-4 w-4 text-gray-500" />
-                    <span>Date: {election.date}</span>
-                  </div>
+            {elections.filter(e => e.status === 'Active').map(election => {
+              const activeCandidates = election.candidates?.filter(
+                (c: any) => c.election_id === election.id && c.status === 'Approved'
+              ) || [];
 
-                  {/* Candidates */}
-                  {election.candidates?.filter((c: any) => c.election_id === election.id).length > 0 && (
-                    <div className="space-y-4">
-                      <h3 className="font-medium">Select a candidate to vote:</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {election.candidates
-                          .filter((c: any) => c.election_id === election.id)
-                          .map((candidate: any) => (
+              return (
+                <Card key={election.id} className="border-l-4 border-green-500">
+                  <CardHeader>
+                    <div className="flex justify-between items-start">
+                      <CardTitle>{election.name}</CardTitle>
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        {election.status}
+                      </span>
+                    </div>
+                    <CardDescription>Ends today at {election.endTime || '5:00 PM'}</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-gray-500 mb-4">{election.description}</p>
+                    <div className="flex items-center text-sm mb-6">
+                      <Calendar className="mr-2 h-4 w-4 text-gray-500" />
+                      <span>Date: {election.date}</span>
+                    </div>
+
+                    {activeCandidates.length > 0 ? (
+                      <div className="space-y-4">
+                        <h3 className="font-medium">Select a candidate to vote:</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {activeCandidates.map((candidate: any) => (
                             <div key={candidate.id} className="border rounded-md p-3 hover:border-primary hover:bg-gray-50">
                               <div className="flex items-center justify-between">
                                 <div>
@@ -194,15 +196,18 @@ const VoterElections = () => {
                               </Button>
                             </div>
                           ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
-
-                </CardContent>
-              </Card>
-            ))}
+                    ) : (
+                      <p className="text-sm text-gray-500 italic">No Approved candidates available to vote for.</p>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
+
 
         {/* Upcoming Elections */}
         {elections.filter(e => e.status === 'Upcoming').length > 0 && (

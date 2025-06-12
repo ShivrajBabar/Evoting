@@ -81,7 +81,7 @@ const EditVoter = () => {
   useEffect(() => {
     const fetchVoter = async () => {
       try {
-        const res = await fetch(`http://localhost:3000/api/voters/user/${id}`);
+        const res = await fetch(`http://localhost:3000/api/voters/${id}`);
         if (!res.ok) throw new Error("Failed to fetch voter");
         const data = await res.json();
         setInitialData(data);
@@ -277,13 +277,16 @@ const EditVoter = () => {
         if (value) formData.append(key, value);
       });
 
+      // Add status (default to 'active')
+      formData.append('status', 'active');
+
       // Append photo file if exists
       if (photoFile) {
         formData.append('photo', photoFile);
       }
 
-      const response = await fetch(`http://localhost:3000/api/voters/${id}`, {
-        method: 'PUT',
+      const response = await fetch(`http://localhost:3000/api/voters/update/${id}`, {
+        method: 'POST',
         body: formData,
       });
 

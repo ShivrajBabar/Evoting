@@ -129,10 +129,9 @@ const Voters = () => {
   // Handle voter status toggle
   const handleStatusToggle = async (voter) => {
     try {
-      const newStatus = voter.status === 'active' ? 'inactive' : 'active';
+      const newStatus = voter.status?.toLowerCase() === 'active' ? 'Inactive' : 'Active';
 
-      // Update in the database first
-      const response = await fetch(`/api/users/${voter.user_id}/status`, {
+      const response = await fetch(`/api/voters/${voter.id}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -144,20 +143,42 @@ const Voters = () => {
         throw new Error('Failed to update status');
       }
 
-      // Then update local state
-      const updatedVoters = voters.map(v => {
-        if (v.id === voter.id) {
-          return { ...v, status: newStatus };
-        }
-        return v;
-      });
+      // ✅ Re-fetch all voters from the server after update
+      const refresh = await fetch('/api/voters');
+      const refreshedData = await refresh.json();
 
-      setVoters(updatedVoters);
+      const transformed = refreshedData.map(voter => ({
+        id: voter.voter_id,
+        user_id: voter.user_id,
+        name: voter.name,
+        email: voter.email,
+        phone: voter.phone,
+        dob: voter.dob,
+        status: voter.status,
+        photo_name: voter.photo_name,
+        voter_card_number: voter.voter_card_number,
+        state_id: voter.state_id,
+        district_id: voter.district_id,
+        loksabha_ward_id: voter.loksabha_ward_id,
+        vidhansabha_ward_id: voter.vidhansabha_ward_id,
+        municipal_corp_id: voter.municipal_corp_id,
+        municipal_corp_ward_id: voter.municipal_corp_ward_id,
+        booth_id: voter.booth_id
+      }));
 
+      const filteredByConstituency = transformed.filter(
+        (voter) =>
+          voter.vidhansabha_ward_id &&
+          user?.vidhansabha_id &&
+          voter.vidhansabha_ward_id === user.vidhansabha_id
+      );
+
+      setVoters(filteredByConstituency);
       toast({
         title: "Status Updated",
-        description: `${voter.name}'s status has been updated to ${newStatus}.`,
+        description: `${voter.name}'s status is now ${newStatus}.`,
       });
+
     } catch (error) {
       console.error("Error updating status:", error);
       toast({
@@ -167,6 +188,7 @@ const Voters = () => {
       });
     }
   };
+
 
   // Handle delete
   const handleDelete = async () => {
@@ -297,9 +319,10 @@ const Voters = () => {
                           <TableCell>{voter.phone || 'N/A'}</TableCell>
                           <TableCell>{voter.voter_card_number || 'N/A'}</TableCell>
                           <TableCell>
-                            <Badge variant={voter.status === 'active' ? 'default' : 'outline'}>
-                              {voter.status === 'active' ? 'Active' : 'Inactive'}
+                            <Badge variant={voter.status?.toLowerCase() === 'active' ? 'default' : 'outline'}>
+                              {voter.status?.charAt(0).toUpperCase() + voter.status?.slice(1).toLowerCase()}
                             </Badge>
+
                           </TableCell>
                           <TableCell className="text-right">
                             <DropdownMenu>

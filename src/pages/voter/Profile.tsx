@@ -24,7 +24,7 @@ const VoterProfile = () => {
 
     const fetchVoterDetails = async () => {
       try {
-        const res = await fetch(`http://localhost:3000/api/voters/${user.id}`);
+        const res = await fetch(`http://localhost:3000/api/voters/user/${user.id}`);
         const data = await res.json();
 
         if (!res.ok) {
@@ -40,6 +40,7 @@ const VoterProfile = () => {
 
     fetchVoterDetails();
   }, [user?.id]);
+
 
   if (error) {
     return (

@@ -27,7 +27,7 @@ interface Candidate {
   status: string;
   photo: string;
   election: string;
-  constituency_id: number;
+  vidhansabha_id: number;
 }
 
 interface Election {
@@ -68,7 +68,7 @@ const AdminDashboard = () => {
         );
 
         const filteredCandidates = candidatesData.filter(
-          (c: Candidate) => Number(c.constituency_id) === adminConstituencyId
+          (c: Candidate) => Number(c.vidhansabha_id) === adminConstituencyId
         );
 
         const filteredElections = electionsData

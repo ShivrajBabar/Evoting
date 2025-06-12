@@ -113,11 +113,7 @@ const AdminProfile = () => {
                 </div>
               </div>
 
-              <div className="mt-6">
-                <Button onClick={handleChangePassword} variant="outline" className="w-full">
-                  Change Password
-                </Button>
-              </div>
+              
             </CardContent>
           </Card>
 
@@ -148,14 +144,7 @@ const AdminProfile = () => {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <label htmlFor="photo" className="text-sm font-medium">Profile Photo</label>
-                  <Input id="photo" type="file" />
-                </div>
-
-                <Button onClick={handleUpdateProfile} type="button" className="w-full md:w-auto">
-                  Update Profile
-                </Button>
+                
               </form>
             </CardContent>
           </Card>
@@ -194,15 +183,7 @@ const AdminProfile = () => {
           </Card>
 
           {/* Recent Activity Placeholder */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Activity</CardTitle>
-              <CardDescription>Your latest actions in the system</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-gray-500">No recent activity available.</div>
-            </CardContent>
-          </Card>
+          
         </div>
       </div>
     </Layout>

@@ -514,6 +514,9 @@ app.delete('/api/admins/:id', async (req, res) => {
 
 
 
+
+
+
 // PATCH /api/admins/:id/status
 app.patch('/api/admins/:id/status', async (req, res) => {
   const userId = req.params.id; // Get id from URL params
@@ -902,6 +905,144 @@ app.post('/api/voters', upload.single('photo'), async (req, res) => {
   }
 });
 
+app.patch('/api/voters/:id/status', async (req, res) => {
+  const voterId = req.params.id;
+  const { status } = req.body;
+
+  if (!['Active', 'Inactive'].includes(status)) {
+    return res.status(400).json({ error: 'Invalid status value' });
+  }
+
+  try {
+    // Step 1: Find the user_id from the voters table
+    const [voterRows] = await pool.query(
+      'SELECT user_id FROM voters WHERE id = ?',
+      [voterId]
+    );
+
+    if (voterRows.length === 0) {
+      return res.status(404).json({ error: 'Voter not found' });
+    }
+
+    const userId = voterRows[0].user_id;
+
+    // Step 2: Update the users table
+    const [result] = await pool.query(
+      'UPDATE users SET status = ? WHERE id = ?',
+      [status, userId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'User not found or status not changed' });
+    }
+
+    res.status(200).json({ message: 'Voter status updated successfully' });
+
+  } catch (error) {
+    console.error('❌ Error updating voter status:', error);
+    res.status(500).json({ error: 'Failed to update voter status', details: error.message });
+  }
+});
+
+app.post('/api/voters/update/:id', upload.single('photo'), async (req, res) => {
+  const voterId = req.params.id;
+  console.log(`🔄 POST /api/voters/update/${voterId}`);
+  console.log("📦 Request body:", req.body);
+
+  const {
+    name,
+    email,
+    phone,
+    dob,
+    voter_id,
+    state,
+    district,
+    loksabhaWard,
+    vidhansabhaWard,
+    localbody,
+    ward,
+    booth,
+    status
+  } = req.body;
+
+  const photo_name = req.file ? req.file.filename : null;
+
+  try {
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    try {
+      // 1. Get user_id from the voters table
+      const [voterRows] = await connection.query('SELECT user_id, photo FROM voters WHERE id = ?', [voterId]);
+
+      if (voterRows.length === 0) {
+        return res.status(404).json({ error: 'Voter not found' });
+      }
+
+      const userId = voterRows[0].user_id;
+      const oldPhoto = voterRows[0].photo;
+
+      // 2. Update users table
+      const updateUserSql = `
+        UPDATE users 
+        SET name = ?, email = ?, phone = ?, dob = ?, ${photo_name ? 'photo_name = ?,' : ''} status = ? 
+        WHERE id = ?
+      `;
+      const userParams = photo_name
+        ? [name, email, phone, dob || null, photo_name, status || 'active', userId]
+        : [name, email, phone, dob || null, status || 'active', userId];
+
+      await connection.query(updateUserSql, userParams);
+
+      // 3. Update voters table
+      const updateVoterSql = `
+        UPDATE voters 
+        SET voter_id = ?, state_id = ?, district_id = ?, loksabha_ward_id = ?, 
+            vidhansabha_ward_id = ?, municipal_corp_id = ?, municipal_corp_ward_id = ?, booth_id = ?
+            ${photo_name ? ', photo = ?' : ''} 
+        WHERE id = ?
+      `;
+      const voterParams = photo_name
+        ? [voter_id, state, district, loksabhaWard || null, vidhansabhaWard || null, localbody || null, ward || null, booth || null, photo_name, voterId]
+        : [voter_id, state, district, loksabhaWard || null, vidhansabhaWard || null, localbody || null, ward || null, booth || null, voterId];
+
+      await connection.query(updateVoterSql, voterParams);
+
+      await connection.commit();
+      connection.release();
+
+      // Optionally delete old photo
+      if (photo_name && oldPhoto && oldPhoto !== photo_name) {
+        const oldPath = path.join(photoDir, oldPhoto);
+        fs.unlink(oldPath, (err) => {
+          if (err) console.warn('⚠️ Failed to delete old photo:', err);
+        });
+      }
+
+      res.json({ message: 'Voter updated successfully' });
+
+    } catch (err) {
+      await connection.rollback();
+      connection.release();
+
+      if (photo_name) {
+        fs.unlink(path.join(photoDir, photo_name), () => {});
+      }
+
+      console.error('❌ Error during update:', err);
+      res.status(500).json({ error: 'Failed to update voter', details: err.message });
+    }
+
+  } catch (err) {
+    console.error('❌ Error opening DB connection:', err);
+    res.status(500).json({ error: 'Failed to process update request' });
+  }
+});
+
+
+
+
+
 
 app.get('/api/voters/photo/:filename', (req, res) => {
   const filename = req.params.filename;
@@ -952,9 +1093,9 @@ app.get('/api/voters', async (req, res) => {
   }
 });
 
-app.get('/api/voters/user/:id', async (req, res) => {
+app.get('/api/voters/:id', async (req, res) => {
   const id = req.params.id;
-  console.log(`📥 GET /api/voters/user/${id}`);
+  console.log(`📥 GET /api/voters/${id}`); // fixed log message too
 
   try {
     const [voter] = await pool.query(`
@@ -1006,6 +1147,7 @@ app.get('/api/voters/user/:id', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch voter', details: error.message });
   }
 });
+
 
 
 

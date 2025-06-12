@@ -146,12 +146,7 @@ const AdminCandidates = () => {
     return matchesSearch && matchesElection && matchesConstituency && matchesStatus;
   });
 
-  const handleDownloadCandidateList = () => {
-    toast({
-      title: "Download Initiated",
-      description: "Candidate list download started.",
-    });
-  };
+  
 
   return (
     <Layout>
@@ -162,9 +157,7 @@ const AdminCandidates = () => {
             <h1 className="text-2xl font-bold">Candidates</h1>
             <p className="text-gray-500">Candidates in {user?.constituency || 'your constituency'}</p>
           </div>
-          <Button variant="outline" onClick={handleDownloadCandidateList}>
-            <Download className="h-4 w-4 mr-2" /> Download List
-          </Button>
+          
         </div>
 
         {/* Search and filters */}
@@ -191,19 +184,7 @@ const AdminCandidates = () => {
             </SelectContent>
           </Select>
 
-          <Select value={constituencyFilter} onValueChange={setConstituencyFilter}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Constituency" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Constituencies</SelectItem>
-              {constituencies.map((constituency) => (
-                <SelectItem key={constituency.id} value={constituency.id.toString()}>
-                  {constituency.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+         
 
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-[180px]">

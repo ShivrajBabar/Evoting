@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Layout from '@/components/Layout';
@@ -8,7 +8,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ElectionService } from '@/api/apiService';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { useState } from 'react';
 import axios from 'axios';
 
 const SuperadminElections = () => {
@@ -17,6 +16,26 @@ const SuperadminElections = () => {
   const queryClient = useQueryClient();
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [voters, setVoters] = useState([]);
+
+  // Fetch voters data from /api/voters
+  useEffect(() => {
+    const fetchVoters = async () => {
+      try {
+        const res = await axios.get('/api/voters');
+        setVoters(res.data);
+      } catch (error) {
+        console.error('Error fetching voters:', error);
+        toast({
+          title: "Error",
+          description: "Failed to fetch voters",
+          variant: "destructive",
+        });
+      }
+    };
+
+    fetchVoters();
+  }, [toast]);
 
   // Fetch elections data
   const { data: elections = [], isLoading } = useQuery({
@@ -35,6 +54,20 @@ const SuperadminElections = () => {
         return [];
       }
     }
+  });
+
+  // Combine elections with eligible voters count
+  const electionsWithVoterCount = elections.map(election => {
+    const eligibleVotersCount = voters.filter(voter =>
+      // Match both loksabha_ward_id and vidhansabha_ward_id (handle null/undefined gracefully)
+      (voter.loksabha_ward_id === election.loksabha) &&
+      (voter.vidhansabha_ward_id === election.vidhansabha)
+    ).length;
+
+    return {
+      ...election,
+      eligibleVoters: eligibleVotersCount
+    };
   });
 
   // Delete election mutation
@@ -85,10 +118,6 @@ const SuperadminElections = () => {
     });
   };
 
-  // For debugging
-  console.log("Elections:", elections);
-  console.log("Delete mutation state:", deleteElectionMutation);
-
   return (
     <Layout>
       <div className="space-y-6">
@@ -110,23 +139,11 @@ const SuperadminElections = () => {
               className="pl-10 pr-4 py-2 border rounded-md w-full"
             />
           </div>
-          <select className="border rounded-md px-4 py-2">
-            <option value="all">All Types</option>
-            <option value="lok-sabha">Lok Sabha</option>
-            <option value="vidhan-sabha">Vidhan Sabha</option>
-            <option value="local-body">Local Body</option>
-          </select>
-          <select className="border rounded-md px-4 py-2">
-            <option value="all">All Statuses</option>
-            <option value="scheduled">Scheduled</option>
-            <option value="active">Active</option>
-            <option value="completed">Completed</option>
-          </select>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {Array.isArray(elections) && elections.length > 0 ? (
-            elections.map((election) => (
+          {Array.isArray(electionsWithVoterCount) && electionsWithVoterCount.length > 0 ? (
+            electionsWithVoterCount.map((election) => (
               <Card key={election.id}>
                 <CardHeader>
                   <div className="flex justify-between items-start">
@@ -154,7 +171,7 @@ const SuperadminElections = () => {
                       </div>
                       <div>
                         <p className="text-gray-500">Eligible Voters</p>
-                        <p className="font-medium">{election.voters?.toLocaleString() || "0"}</p>
+                        <p className="font-medium">{(election.eligibleVoters || 0).toLocaleString()}</p>
                       </div>
                       {election.turnout && (
                         <div>
