@@ -11,23 +11,23 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { 
-  Home, 
-  LogOut, 
-  Menu, 
-  User, 
-  Users, 
-  Vote, 
+import {
+  Home,
+  LogOut,
+  Menu,
+  User,
+  Users,
+  Vote,
   Settings,
   Award,
-  BarChart 
+  BarChart
 } from 'lucide-react';
 
 const Layout = ({ children }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  
+
   // If no user, return null
   if (!user) return null;
 
@@ -107,27 +107,22 @@ const Layout = ({ children }) => {
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Sticky Header - Updated layout */}
       <header className="bg-primary text-white shadow-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          {/* Mobile menu button */}
-          <button
-            className="md:hidden p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-          >
-            <Menu size={24} />
-          </button>
-
-          {/* Logo and Name - Moved to left side */}
+        <div className="w-full px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          {/* Left: Logo and Site Name */}
           <div className="flex items-center">
+            <button
+              className="md:hidden p-2 rounded-md mr-2 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+            >
+              <Menu size={24} />
+            </button>
             <Link to="/" className="flex items-center">
               <Vote className="h-8 w-8 text-white mr-2" />
               <span className="font-bold text-xl">Ballet Secure</span>
             </Link>
           </div>
 
-          {/* Empty div to push profile to the right */}
-          <div className="flex-1"></div>
-
-          {/* User dropdown - Moved to right side */}
+          {/* Right: Profile Dropdown */}
           <div className="flex items-center">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -163,6 +158,7 @@ const Layout = ({ children }) => {
           </div>
         </div>
       </header>
+
 
       <div className="flex flex-1">
         {/* Sidebar for larger screens */}
@@ -222,7 +218,7 @@ const Layout = ({ children }) => {
 
         {/* Overlay */}
         {sidebarOpen && (
-          <div 
+          <div
             className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-30"
             onClick={() => setSidebarOpen(false)}
           ></div>
