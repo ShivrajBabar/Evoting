@@ -12,11 +12,21 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Create pool for MySQL
+// const pool = mysql.createPool({
+//   host: 'localhost',
+//   user: 'root',
+//   password: '',
+//   database: 'ballet_evoting_schema',
+//   waitForConnections: true,
+//   connectionLimit: 10,
+//   queueLimit: 0
+// });
+
 const pool = mysql.createPool({
-  host: 'localhost',
-  user: 'root',
-  password: '',
-  database: 'ballet_evoting_schema',
+  host: '193.203.184.92',
+  user: 'u906396894_evotingShivraj',
+  password: 'Rajendrababar@123',
+  database: 'u906396894_evotingShivraj',
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0
@@ -1654,122 +1664,7 @@ app.get('/api/votes/counts', async (req, res) => {
   }
 });
 
-// app.post('/api/login', async (req, res) => {
-//   const { email, password, role } = req.body;
 
-//   if (!email || !password || !role) {
-//     return res.status(400).json({ error: 'Email, password, and role are required' });
-//   }
-
-//   try {
-//     // 1. Static Super Admin Check
-//     if (role.toLowerCase() === 'superadmin') {
-//       const dummyEmail = 'superadmin@example.com';
-//       const dummyPasswordHash = await bcrypt.hash('password123', 10);
-
-//       const isEmailMatch = email.toLowerCase() === dummyEmail;
-//       const isPasswordMatch = await bcrypt.compare(password, dummyPasswordHash);
-
-//       if (!isEmailMatch || !isPasswordMatch) {
-//         return res.status(401).json({ error: 'Invalid superadmin credentials' });
-//       }
-
-//       return res.status(200).json({
-//         message: 'Login successful',
-//         user: {
-//           id: 0,
-//           name: 'Super Admin',
-//           email: dummyEmail,
-//           phone: 'N/A',
-//           role: 'superadmin',
-//           photo: null
-//         }
-//       });
-//     }
-
-//     // Dynamically build the query based on role
-//     let queryStr = `
-//       SELECT 
-//         u.id, u.name, u.email, u.phone, u.password, u.photo_name, r.role_name AS role_name
-//     `;
-//     let joins = `
-//       FROM users u
-//       JOIN roles r ON u.role_id = r.id
-//     `;
-//     let extraFields = {};
-
-//     if (role.toLowerCase() === 'voter') {
-//       queryStr += `,
-//         v.loksabha_ward_id, 
-//         v.vidhansabha_ward_id, 
-//         v.municipal_corp_id
-//       `;
-//       joins += ` LEFT JOIN voters v ON u.id = v.user_id`;
-//     }
-
-//     if (role.toLowerCase() === 'admin') {
-//       queryStr += `,
-//         a.constituency_id,
-//         a.district_id,
-//         a.state_id
-//       `;
-//       joins += ` LEFT JOIN admins a ON u.id = a.user_id`;
-//     }
-
-//     queryStr += joins + ` WHERE u.email = ? LIMIT 1`;
-
-//     const [user] = await pool.query(queryStr, [email]);
-
-//     if (!user || user.length === 0) {
-//       return res.status(404).json({ error: 'Invalid email or password' });
-//     }
-
-//     const foundUser = user[0];
-
-//     if (foundUser.role_name.toLowerCase() !== role.toLowerCase()) {
-//       return res.status(403).json({ error: `Access denied for role: ${role}` });
-//     }
-
-//     const isMatch = await bcrypt.compare(password, foundUser.password);
-//     if (!isMatch) {
-//       return res.status(401).json({ error: 'Invalid email or password' });
-//     }
-
-//     // Prepare additional fields
-//     if (role.toLowerCase() === 'voter') {
-//       extraFields = {
-//         loksabha_id: foundUser.loksabha_ward_id || null,
-//         vidhansabha_id: foundUser.vidhansabha_ward_id || null,
-//         local_body_id: foundUser.municipal_corp_id || null
-//       };
-//     } else if (role.toLowerCase() === 'admin') {
-//       extraFields = {
-//         vidhansabha_id: foundUser.constituency_id || null,
-//         district_id: foundUser.district_id || null,
-//         state_id: foundUser.state_id || null
-//       };
-//     }
-
-//     res.status(200).json({
-//       message: 'Login successful',
-//       user: {
-//         id: foundUser.id,
-//         name: foundUser.name,
-//         email: foundUser.email,
-//         phone: foundUser.phone,
-//         role: foundUser.role_name,
-//         photo: foundUser.photo_name
-//           ? `http://localhost:${PORT}/uploads/photos/${foundUser.photo_name}`
-//           : null,
-//         ...extraFields
-//       }
-//     });
-
-//   } catch (error) {
-//     console.error('Login error:', error);
-//     res.status(500).json({ error: 'Internal server error', details: error.message });
-//   }
-// });
 
 app.post('/api/login', async (req, res) => {
   const { email, password, role } = req.body;
