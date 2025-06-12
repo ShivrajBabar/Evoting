@@ -173,10 +173,7 @@ const AdminProfile = () => {
                     <p className="text-sm text-gray-500">Constituency</p>
                     <p className="font-medium">{adminProfile.constituency}</p>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Registered Voters</p>
-                    <p className="font-medium">{(adminProfile.votersCount || 0).toLocaleString()}</p>
-                  </div>
+                  
                 </div>
               </div>
             </CardContent>

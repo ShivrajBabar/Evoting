@@ -80,7 +80,7 @@ const Layout = ({ children }) => {
       case 'voter':
         return `Voting Portal - ${user.electionType || 'Elections'}`;
       default:
-        return 'Digital Vote Verse';
+        return 'Ballot Secure';
     }
   };
 
@@ -118,7 +118,7 @@ const Layout = ({ children }) => {
             </button>
             <Link to="/" className="flex items-center">
               <Vote className="h-8 w-8 text-white mr-2" />
-              <span className="font-bold text-xl">Ballet Secure</span>
+              <span className="font-bold text-xl">Ballot Secure</span>
             </Link>
           </div>
 
@@ -239,7 +239,7 @@ const Layout = ({ children }) => {
       <footer className="bg-gray-100 py-4 mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="text-center text-sm text-gray-500">
-            &copy; {new Date().getFullYear()} Digital Vote Verse. All rights reserved.
+            &copy; {new Date().getFullYear()} Ballet Secure. All rights reserved.
           </p>
         </div>
       </footer>
