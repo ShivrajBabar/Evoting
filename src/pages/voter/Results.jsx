@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Layout from '@/components/Layout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
@@ -15,6 +15,9 @@ const VoterResults = () => {
   const [selectedElection, setSelectedElection] = useState('all');
   const [voteCounts, setVoteCounts] = useState([]);
   const [loadingVotes, setLoadingVotes] = useState(false);
+
+  // This will hold photos keyed by candidate ID
+  const [candidatePhotos, setCandidatePhotos] = useState({});
 
   // Fetch all election results
   const { data: allResults = [], isLoading: resultsLoading } = useQuery({
@@ -37,13 +40,18 @@ const VoterResults = () => {
     },
   });
 
-  // Fetch vote counts for all elections
+  // Memoize published results
+  const publishedResults = useMemo(() => {
+    return allResults.filter(r => r.published == 1);
+  }, [allResults]);
+
+  // Fetch vote counts for all elections (only published)
   useEffect(() => {
     const fetchAllVoteCounts = async () => {
-      if (!allResults || allResults.length === 0) return;
+      if (!publishedResults || publishedResults.length === 0) return;
 
       setLoadingVotes(true);
-      const uniqueElectionIds = [...new Set(allResults.map(r => r.election_id))];
+      const uniqueElectionIds = [...new Set(publishedResults.map(r => r.election_id))];
 
       try {
         const allCounts = await Promise.all(
@@ -75,12 +83,12 @@ const VoterResults = () => {
     };
 
     fetchAllVoteCounts();
-  }, [allResults]);
+  }, [publishedResults]);
 
-  // Filter results by selected election
+  // Filter results by selected election (only published)
   const filteredResults = selectedElection === 'all'
-    ? allResults
-    : allResults.filter(r => r.election_id === parseInt(selectedElection));
+    ? publishedResults
+    : publishedResults.filter(r => r.election_id === parseInt(selectedElection));
 
   // Merge vote counts into each result
   const mergedResults = filteredResults.map(result => {
@@ -92,7 +100,7 @@ const VoterResults = () => {
         party: vc.party,
         votes: parseInt(vc.vote_count),
         percentage: 0,
-        photo_url: '/placeholder.jpg',
+        photo_url: '/placeholder.jpg',  // default placeholder
         symbol_url: '/placeholder.svg',
       }));
 
@@ -123,7 +131,54 @@ const VoterResults = () => {
     };
   });
 
-  const electionOptions = allResults.map(e => ({
+  // Fetch candidate photos for winners
+  useEffect(() => {
+    const fetchCandidatePhotos = async () => {
+      const winnerIds = mergedResults
+        .map(r => r.winner_id)
+        .filter(id => id && !candidatePhotos[id]); // only fetch if not already fetched
+
+      if (winnerIds.length === 0) return;
+
+      try {
+        const photoMap = { ...candidatePhotos };
+
+        await Promise.all(winnerIds.map(async (id) => {
+          try {
+            const response = await fetch(`/api/candidates/${id}`);
+            if (!response.ok) throw new Error('Failed to fetch candidate');
+
+            const data = await response.json();
+            console.log(`Candidate API response for ID ${id}:`, data);
+
+            // Use 'photo' field from API response for the photo URL
+            photoMap[id] = data.photo || '/placeholder.jpg';
+          } catch (err) {
+            console.error(`Error fetching candidate ${id} info:`, err);
+            photoMap[id] = '/placeholder.jpg';
+          }
+        }));
+
+        setCandidatePhotos(photoMap);
+      } catch (error) {
+        console.error('Error fetching candidate photos:', error);
+      }
+    };
+
+    fetchCandidatePhotos();
+  }, [mergedResults, candidatePhotos]);
+
+  // Replace placeholder photo with fetched photo for winners in mergedResults before render
+  const mergedResultsWithPhotos = mergedResults.map(r => {
+    const winnerPhoto = candidatePhotos[r.winner_id] || '/placeholder.jpg';
+    // update photo_url for winner candidate in candidates array
+    const candidatesWithPhoto = r.candidates.map(c =>
+      c.id === r.winner_id ? { ...c, photo_url: winnerPhoto } : c
+    );
+    return { ...r, candidates: candidatesWithPhoto };
+  });
+
+  const electionOptions = publishedResults.map(e => ({
     id: e.election_id,
     name: e.election_name,
   }));
@@ -143,7 +198,7 @@ const VoterResults = () => {
     <Layout>
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-4 sm:space-y-0">
-          <ResultsPageHeader electionCount={mergedResults.length} />
+          <ResultsPageHeader electionCount={mergedResultsWithPhotos.length} />
         </div>
 
         <ElectionSelector
@@ -153,9 +208,9 @@ const VoterResults = () => {
         />
 
         <div className="space-y-4">
-          {mergedResults.length > 0 ? (
-            mergedResults.map(result => (
-              <ResultCard key={result.id} result={result} />
+          {mergedResultsWithPhotos.length > 0 ? (
+            mergedResultsWithPhotos.map(result => (
+              <ResultCard key={result.id || result.election_id} result={result} />
             ))
           ) : (
             <EmptyResults />
