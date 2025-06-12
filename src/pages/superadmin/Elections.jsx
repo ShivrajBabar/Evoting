@@ -6,7 +6,6 @@ import { Plus, Search, Edit, Trash2, Calendar, Eye } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ElectionService } from '@/api/apiService';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import axios from 'axios';
 
@@ -18,7 +17,7 @@ const SuperadminElections = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [voters, setVoters] = useState([]);
 
-  // Fetch voters data from /api/voters
+  // Fetch voters data
   useEffect(() => {
     const fetchVoters = async () => {
       try {
@@ -33,7 +32,6 @@ const SuperadminElections = () => {
         });
       }
     };
-
     fetchVoters();
   }, [toast]);
 
@@ -42,8 +40,8 @@ const SuperadminElections = () => {
     queryKey: ['elections'],
     queryFn: async () => {
       try {
-        const response = await ElectionService.getAllElections();
-        return Array.isArray(response) ? response : [];
+        const response = await axios.get('/api/elections');
+        return Array.isArray(response.data) ? response.data : [];
       } catch (error) {
         console.error('Error fetching elections:', error);
         toast({
@@ -56,13 +54,19 @@ const SuperadminElections = () => {
     }
   });
 
-  // Combine elections with eligible voters count
+  // Map eligible voters by election type
   const electionsWithVoterCount = elections.map(election => {
-    const eligibleVotersCount = voters.filter(voter =>
-      // Match both loksabha_ward_id and vidhansabha_ward_id (handle null/undefined gracefully)
-      (voter.loksabha_ward_id === election.loksabha) &&
-      (voter.vidhansabha_ward_id === election.vidhansabha)
-    ).length;
+    let eligibleVotersCount = 0;
+
+    if (election.type === 'Lok Sabha') {
+      eligibleVotersCount = voters.filter(voter =>
+        Number(voter.loksabha_ward_id) === Number(election.loksabha)
+      ).length;
+    } else if (election.type === 'Vidhan Sabha') {
+      eligibleVotersCount = voters.filter(voter =>
+        Number(voter.vidhansabha_ward_id) === Number(election.vidhansabha)
+      ).length;
+    }
 
     return {
       ...election,
@@ -70,11 +74,10 @@ const SuperadminElections = () => {
     };
   });
 
-  // Delete election mutation
+  // 🔥 Delete election directly using axios
   const deleteElectionMutation = useMutation({
     mutationFn: async (id) => {
-      console.log("Deleting election with ID:", id);
-      return await ElectionService.deleteElection(id);
+      return await axios.delete(`/api/elections/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['elections']);
@@ -142,17 +145,17 @@ const SuperadminElections = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {Array.isArray(electionsWithVoterCount) && electionsWithVoterCount.length > 0 ? (
+          {electionsWithVoterCount.length > 0 ? (
             electionsWithVoterCount.map((election) => (
               <Card key={election.id}>
                 <CardHeader>
                   <div className="flex justify-between items-start">
                     <CardTitle>{election.name}</CardTitle>
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
-                      ${election.status === 'Active' ? 'bg-green-100 text-green-800' : 
-                      election.status === 'Scheduled' ? 'bg-blue-100 text-blue-800' : 
-                      election.status === 'Preparation' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-gray-100 text-gray-800'}`}>
+                      ${election.status === 'Active' ? 'bg-green-100 text-green-800' :
+                        election.status === 'Scheduled' ? 'bg-blue-100 text-blue-800' :
+                          election.status === 'Preparation' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-gray-100 text-gray-800'}`}>
                       {election.status}
                     </span>
                   </div>
@@ -184,26 +187,26 @@ const SuperadminElections = () => {
                 </CardContent>
                 <CardFooter className="flex justify-between">
                   <div className="flex space-x-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => handleEditElection(election.id)}
                     >
                       <Edit className="h-4 w-4 mr-1" /> Edit
                     </Button>
                     {election.status === 'Completed' && (
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => handleViewResults(election.id)}
                       >
                         <Eye className="h-4 w-4 mr-1" /> Results
                       </Button>
                     )}
                   </div>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => handleDeleteElection(election.id)}
                   >
                     <Trash2 className="h-4 w-4 text-red-500" />
@@ -229,9 +232,9 @@ const SuperadminElections = () => {
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-            <Button 
-              variant="destructive" 
-              onClick={confirmDelete} 
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
               disabled={deleteElectionMutation.isPending}
             >
               {deleteElectionMutation.isPending ? "Deleting..." : "Delete Election"}

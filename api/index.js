@@ -1299,6 +1299,35 @@ app.post('/api/elections', async (req, res) => {
   }
 });
 
+app.delete('/api/elections/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Validate the ID
+    if (!id) {
+      return res.status(400).json({ error: 'Election ID is required' });
+    }
+
+    // Delete the election
+    const result = await query({
+      query: `DELETE FROM elections WHERE id = ?`,
+      values: [id]
+    });
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Election not found' });
+    }
+
+    res.status(200).json({ message: 'Election deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting election:', error);
+    res.status(500).json({
+      error: 'Failed to delete election',
+      details: error.message
+    });
+  }
+});
+
 
 
 app.get('/api/elections', async (req, res) => {
