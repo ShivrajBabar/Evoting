@@ -39,6 +39,7 @@ const VoterElections = () => {
             if (election.status === 'Active') {
               const candidatesRes = await fetch(`http://localhost:3000/api/candidates?election_id=${election.id}`);
               const candidatesData = await candidatesRes.json();
+              console.log(`Candidates for election ${election.id}:`, candidatesData);
               return { ...election, candidates: candidatesData };
             }
             return election;
@@ -179,13 +180,24 @@ const VoterElections = () => {
                         <h3 className="font-medium">Select a candidate to vote:</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           {activeCandidates.map((candidate: any) => (
-                            <div key={candidate.id} className="border rounded-md p-3 hover:border-primary hover:bg-gray-50">
+                            <div
+                              key={candidate.id}
+                              className="border rounded-md p-3 hover:border-primary hover:bg-gray-50"
+                            >
                               <div className="flex items-center justify-between">
                                 <div>
                                   <p className="font-medium">{candidate.name}</p>
                                   <p className="text-sm text-gray-500">{candidate.party}</p>
                                 </div>
-                                <div className="text-xl">{candidate.symbol?.split?.(' ')[0] || '🗳️'}</div>
+                                {candidate.party_logo_url ? (
+                                  <img
+                                    src={candidate.party_logo_url}
+                                    alt={`${candidate.party} logo`}
+                                    className="h-20 w-20 object-contain rounded"
+                                  />
+                                ) : (
+                                  <div className="text-xl">🗳️</div>
+                                )}
                               </div>
                               <Button
                                 className="w-full mt-2"
@@ -196,6 +208,7 @@ const VoterElections = () => {
                               </Button>
                             </div>
                           ))}
+
                         </div>
                       </div>
                     ) : (
