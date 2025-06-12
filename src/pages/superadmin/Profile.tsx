@@ -42,12 +42,7 @@ const SuperadminProfile = () => {
     });
   };
 
-  const handleChangePassword = () => {
-    toast({
-      title: "Feature in development",
-      description: "Password change functionality will be implemented soon.",
-    });
-  };
+  
 
   const userInitials = user?.name
     ?.split(' ')
@@ -96,11 +91,7 @@ const SuperadminProfile = () => {
                 </div>
               </div>
               
-              <div className="mt-6">
-                <Button onClick={handleChangePassword} variant="outline" className="w-full">
-                  Change Password
-                </Button>
-              </div>
+              
             </CardContent>
           </Card>
 
@@ -115,30 +106,25 @@ const SuperadminProfile = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label htmlFor="name" className="text-sm font-medium">Full Name</label>
-                    <Input id="name" defaultValue={superadminProfile.name} />
+                    <Input id="name" defaultValue={superadminProfile.name} disabled/>
                   </div>
                   <div className="space-y-2">
                     <label htmlFor="email" className="text-sm font-medium">Email</label>
-                    <Input id="email" type="email" defaultValue={superadminProfile.email} />
+                    <Input id="email" type="email" defaultValue={superadminProfile.email} disabled/>
                   </div>
                   <div className="space-y-2">
                     <label htmlFor="phone" className="text-sm font-medium">Phone Number</label>
-                    <Input id="phone" defaultValue={superadminProfile.phone} />
+                    <Input id="phone" defaultValue={superadminProfile.phone} disabled/>
                   </div>
                   <div className="space-y-2">
                     <label htmlFor="dob" className="text-sm font-medium">Date of Birth</label>
-                    <Input id="dob" type="date" defaultValue={superadminProfile.dob} />
+                    <Input id="dob" type="date" defaultValue={superadminProfile.dob} disabled/>
                   </div>
                 </div>
                 
-                <div className="space-y-2">
-                  <label htmlFor="photo" className="text-sm font-medium">Profile Photo</label>
-                  <Input id="photo" type="file" />
-                </div>
                 
-                <Button onClick={handleUpdateProfile} type="button" className="w-full md:w-auto">
-                  Update Profile
-                </Button>
+                
+                
               </form>
             </CardContent>
           </Card>

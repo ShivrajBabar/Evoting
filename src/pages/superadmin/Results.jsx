@@ -3,7 +3,6 @@ import Layout from '@/components/Layout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import { ResultService, ElectionService } from '@/api/apiService';
-import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,8 +12,12 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { FileCheck, AlertTriangle, Search, Eye, EyeOff, Trash2, RefreshCw } from 'lucide-react';
+import axios from 'axios';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from '@/components/ui/use-toast';
 
 const SuperadminResults = () => {
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const { toast } = useToast();
   const [selectedElection, setSelectedElection] = useState('all');
@@ -46,6 +49,7 @@ const SuperadminResults = () => {
   });
 
   // Fetch results
+
   const {
     data: results = [],
     isLoading: resultsLoading,
@@ -62,8 +66,34 @@ const SuperadminResults = () => {
           }
         }
 
-        const actualData = await ResultService.getAllResults(filters);
-        return Array.isArray(actualData) ? actualData : [];
+        // Build query string based on filters
+        const queryParams = new URLSearchParams();
+        if (filters.election_id) {
+          queryParams.append('election_id', filters.election_id);
+        }
+
+        const response = await fetch(`http://localhost:3000/api/results?${queryParams.toString()}`);
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to fetch results");
+        }
+
+        // Transform the data to match your existing structure
+        return data.data.map(result => ({
+          id: result.id,
+          election_id: result.election_id,
+          election_name: result.election_name,
+          winner_name: result.winner,
+          winner_party: result.winner_party,
+          total_votes: result.total_votes,
+          published: Boolean(result.published), // Convert to boolean
+          published_date: result.date,
+          vidhansabha_id: result.vidhansabha_id,
+          loksabha_id: result.loksabha_id,
+          constituency_name: result.vidhansabha_name || result.loksabha_name || 'Unknown Constituency',
+          winner_id: result.winner_id
+        }));
       } catch (error) {
         console.error('Error fetching results:', error);
         toast({
@@ -97,18 +127,25 @@ const SuperadminResults = () => {
     );
   });
 
-  // Toggle publish status
+
   const togglePublishStatus = async (resultId, currentPublishStatus) => {
     try {
-      await ResultService.updateResult(resultId, { published: !currentPublishStatus });
+      const newStatus = currentPublishStatus ? 0 : 1;
+
+      await axios.patch(`http://localhost:3001/api/results/${resultId}/publish`, {
+        published: newStatus
+      });
+
       toast({
         title: "Success",
-        description: currentPublishStatus ? "Result unpublished" : "Result published",
+        description: newStatus === 1 ? "Result published" : "Result unpublished",
         variant: "default"
       });
-      refetchResults();
+
+      // ✅ Only this is needed
+      await refetchResults();
     } catch (error) {
-      console.error('Error toggling publish status:', error);
+      console.error('❌ Error toggling publish status:', error);
       toast({
         title: "Error",
         description: "Failed to update result status",
@@ -117,25 +154,42 @@ const SuperadminResults = () => {
     }
   };
 
+
+
+
+
   // Delete result
   const deleteResult = async (resultId) => {
     try {
-      await ResultService.deleteResult(resultId);
+      console.log('Deleting result with ID:', resultId); // Debug log
+
+      const response = await fetch(`http://localhost:3000/api/results/${resultId}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to delete result');
+      }
+
       toast({
         title: "Success",
         description: "Result deleted successfully",
         variant: "default"
       });
-      refetchResults();
+
+      // Refresh the results list
+      await refetchResults();
     } catch (error) {
       console.error('Error deleting result:', error);
       toast({
         title: "Error",
-        description: "Failed to delete result",
+        description: error.message,
         variant: "destructive"
       });
     }
   };
+
 
   const generateResults = async () => {
     if (!selectedElectionId) {
@@ -147,7 +201,7 @@ const SuperadminResults = () => {
       return;
     }
 
-    // 🧠 Find selected election object
+    // Find selected election object
     const selectedElection = elections.find(
       e => e.id.toString() === selectedElectionId
     );
@@ -161,18 +215,58 @@ const SuperadminResults = () => {
       return;
     }
 
-    // ✅ Prepare payload
-    const payload = {
-      election_id: selectedElection.id,
-      election_name: selectedElection.name,
-      result_date: selectedElection.resultDate,
-      vidhansabha_id: selectedElection.vidhansabha,
-      loksabha_id: selectedElection.loksabha
-    };
-
-    console.log("📤 Sending JSON to backend:", payload);
-
     try {
+      // First fetch the vote counts
+      const voteCountsResponse = await fetch(`http://localhost:3000/api/votes/counts?election_id=${selectedElection.id}`);
+      const voteCountsData = await voteCountsResponse.json();
+
+      if (!voteCountsResponse.ok) {
+        throw new Error(voteCountsData.error || "Failed to fetch vote counts");
+      }
+
+      if (!Array.isArray(voteCountsData)) {
+        throw new Error("Invalid vote counts data received");
+      }
+
+      // Calculate total votes and find winner
+      let totalVotes = 0;
+      let winner = null;
+      const candidates = [];
+
+      voteCountsData.forEach(candidate => {
+        totalVotes += candidate.vote_count || 0;
+        candidates.push({
+          candidate_id: candidate.candidate_id,
+          candidate_name: candidate.candidate_name,
+          party: candidate.party,
+          vote_count: candidate.vote_count || 0
+        });
+
+        // Determine winner (highest votes)
+        if (!winner || candidate.vote_count > winner.vote_count) {
+          winner = candidate;
+        }
+      });
+
+      // Prepare payload
+      const payload = {
+        election_id: selectedElection.id,
+        election_name: selectedElection.name,
+        result_date: selectedElection.resultDate || new Date().toISOString(),
+        vidhansabha_id: selectedElection.vidhansabha,
+        loksabha_id: selectedElection.loksabha,
+        total_votes: totalVotes,
+        winner_id: winner?.candidate_id || null,
+        winner_name: winner?.candidate_name || null,
+        winner_party: winner?.party || null,
+        published: false, // Default to unpublished
+        candidates: candidates,
+        status: 'completed' // Add status field if required by your backend
+      };
+
+      console.log("📤 Sending JSON to backend:", payload);
+
+      // Send to generate results API
       const response = await fetch('http://localhost:3000/api/results/generate', {
         method: 'POST',
         headers: {
@@ -180,6 +274,8 @@ const SuperadminResults = () => {
         },
         body: JSON.stringify(payload)
       });
+      console.log("✅ Results from backend:", results);
+
 
       const text = await response.text();
       console.log("🔍 Raw API response:", text);

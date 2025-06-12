@@ -44,7 +44,7 @@ const fileFilter = (req, file, cb) => {
   if (file.mimetype.startsWith('image/')) {
     cb(null, true);
   } else {
-    cb(new Error('Only image files are allowed'), false);
+    cb(new Error('Only image files are allowed'), true);
   }
 };
 
@@ -1026,7 +1026,7 @@ app.post('/api/voters/update/:id', upload.single('photo'), async (req, res) => {
       connection.release();
 
       if (photo_name) {
-        fs.unlink(path.join(photoDir, photo_name), () => {});
+        fs.unlink(path.join(photoDir, photo_name), () => { });
       }
 
       console.error('❌ Error during update:', err);
@@ -1570,6 +1570,123 @@ app.get('/api/votes/counts', async (req, res) => {
   }
 });
 
+// app.post('/api/login', async (req, res) => {
+//   const { email, password, role } = req.body;
+
+//   if (!email || !password || !role) {
+//     return res.status(400).json({ error: 'Email, password, and role are required' });
+//   }
+
+//   try {
+//     // 1. Static Super Admin Check
+//     if (role.toLowerCase() === 'superadmin') {
+//       const dummyEmail = 'superadmin@example.com';
+//       const dummyPasswordHash = await bcrypt.hash('password123', 10);
+
+//       const isEmailMatch = email.toLowerCase() === dummyEmail;
+//       const isPasswordMatch = await bcrypt.compare(password, dummyPasswordHash);
+
+//       if (!isEmailMatch || !isPasswordMatch) {
+//         return res.status(401).json({ error: 'Invalid superadmin credentials' });
+//       }
+
+//       return res.status(200).json({
+//         message: 'Login successful',
+//         user: {
+//           id: 0,
+//           name: 'Super Admin',
+//           email: dummyEmail,
+//           phone: 'N/A',
+//           role: 'superadmin',
+//           photo: null
+//         }
+//       });
+//     }
+
+//     // Dynamically build the query based on role
+//     let queryStr = `
+//       SELECT 
+//         u.id, u.name, u.email, u.phone, u.password, u.photo_name, r.role_name AS role_name
+//     `;
+//     let joins = `
+//       FROM users u
+//       JOIN roles r ON u.role_id = r.id
+//     `;
+//     let extraFields = {};
+
+//     if (role.toLowerCase() === 'voter') {
+//       queryStr += `,
+//         v.loksabha_ward_id, 
+//         v.vidhansabha_ward_id, 
+//         v.municipal_corp_id
+//       `;
+//       joins += ` LEFT JOIN voters v ON u.id = v.user_id`;
+//     }
+
+//     if (role.toLowerCase() === 'admin') {
+//       queryStr += `,
+//         a.constituency_id,
+//         a.district_id,
+//         a.state_id
+//       `;
+//       joins += ` LEFT JOIN admins a ON u.id = a.user_id`;
+//     }
+
+//     queryStr += joins + ` WHERE u.email = ? LIMIT 1`;
+
+//     const [user] = await pool.query(queryStr, [email]);
+
+//     if (!user || user.length === 0) {
+//       return res.status(404).json({ error: 'Invalid email or password' });
+//     }
+
+//     const foundUser = user[0];
+
+//     if (foundUser.role_name.toLowerCase() !== role.toLowerCase()) {
+//       return res.status(403).json({ error: `Access denied for role: ${role}` });
+//     }
+
+//     const isMatch = await bcrypt.compare(password, foundUser.password);
+//     if (!isMatch) {
+//       return res.status(401).json({ error: 'Invalid email or password' });
+//     }
+
+//     // Prepare additional fields
+//     if (role.toLowerCase() === 'voter') {
+//       extraFields = {
+//         loksabha_id: foundUser.loksabha_ward_id || null,
+//         vidhansabha_id: foundUser.vidhansabha_ward_id || null,
+//         local_body_id: foundUser.municipal_corp_id || null
+//       };
+//     } else if (role.toLowerCase() === 'admin') {
+//       extraFields = {
+//         vidhansabha_id: foundUser.constituency_id || null,
+//         district_id: foundUser.district_id || null,
+//         state_id: foundUser.state_id || null
+//       };
+//     }
+
+//     res.status(200).json({
+//       message: 'Login successful',
+//       user: {
+//         id: foundUser.id,
+//         name: foundUser.name,
+//         email: foundUser.email,
+//         phone: foundUser.phone,
+//         role: foundUser.role_name,
+//         photo: foundUser.photo_name
+//           ? `http://localhost:${PORT}/uploads/photos/${foundUser.photo_name}`
+//           : null,
+//         ...extraFields
+//       }
+//     });
+
+//   } catch (error) {
+//     console.error('Login error:', error);
+//     res.status(500).json({ error: 'Internal server error', details: error.message });
+//   }
+// });
+
 app.post('/api/login', async (req, res) => {
   const { email, password, role } = req.body;
 
@@ -1606,7 +1723,7 @@ app.post('/api/login', async (req, res) => {
     // Dynamically build the query based on role
     let queryStr = `
       SELECT 
-        u.id, u.name, u.email, u.phone, u.password, u.photo_name, r.role_name AS role_name
+        u.id, u.name, u.email, u.phone, u.password, u.photo_name, u.status, r.role_name AS role_name
     `;
     let joins = `
       FROM users u
@@ -1642,13 +1759,20 @@ app.post('/api/login', async (req, res) => {
 
     const foundUser = user[0];
 
+    // Check role match
     if (foundUser.role_name.toLowerCase() !== role.toLowerCase()) {
       return res.status(403).json({ error: `Access denied for role: ${role}` });
     }
 
+    // Check password match
     const isMatch = await bcrypt.compare(password, foundUser.password);
     if (!isMatch) {
       return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    // Check status
+    if (foundUser.status.toLowerCase() !== 'active') {
+      return res.status(403).json({ error: 'User status is not active. Please contact support.' });
     }
 
     // Prepare additional fields
@@ -1687,14 +1811,18 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-
 app.post('/api/results/generate', async (req, res) => {
   const {
     election_id,
     election_name,
     result_date,
     vidhansabha_id,
-    loksabha_id
+    loksabha_id,
+    winner_id,
+    winner_name,
+    winner_party,
+    total_votes,
+    candidates
   } = req.body;
 
   if (!election_id || !election_name) {
@@ -1702,8 +1830,11 @@ app.post('/api/results/generate', async (req, res) => {
   }
 
   try {
-    // 🗳 Get vote counts
-    const voteCounts = await query({
+    // If winner data is provided in the request, use it
+    const winner = winner_name ? {
+      candidate_name: winner_name,
+      party: winner_party
+    } : await query({
       query: `
         SELECT 
           c.name AS candidate_name,
@@ -1719,43 +1850,41 @@ app.post('/api/results/generate', async (req, res) => {
       values: [election_id, election_id]
     });
 
-    if (voteCounts.length === 0) {
-      return res.status(400).json({ error: 'No votes found for this election' });
+    if (!winner || !winner.candidate_name) {
+      return res.status(400).json({ error: 'No winner determined for this election' });
     }
 
-    const winner = voteCounts[0];
-
-    // 🧮 Total votes
-    const totalVotesResult = await query({
+    // Calculate total votes if not provided
+    const totalVotes = total_votes || (await query({
       query: `SELECT COUNT(*) AS total_votes FROM votes WHERE election_id = ?`,
       values: [election_id]
-    });
+    }))[0].total_votes;
 
-    const totalVotes = totalVotesResult[0].total_votes;
     const now = new Date().toISOString().split('T')[0];
 
-    // 📝 Insert result
+    // Insert result with published = true (1)
     await query({
       query: `
-        INSERT INTO result (
-          election_id, election_name, winner, total_votes, published, status, date,
-          vidhansabha_id, loksabha_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO results (
+          election_id, election_name, winner, winner_party, total_votes, published, date,
+          vidhansabha_id, loksabha_id, winner_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       values: [
         election_id,
         election_name,
         winner.candidate_name,
+        winner.party,
         totalVotes,
-        false,         // published = false
-        'Publish',     // status = "Publish"
+        0,         // ✅ published = true (1)
         result_date || now,
         vidhansabha_id || null,
-        loksabha_id || null
+        loksabha_id || null,
+        winner_id || null
       ]
     });
 
-    // ✅ Update election result status
+    // Update election result status
     await query({
       query: `UPDATE elections SET result = 'Yes' WHERE id = ?`,
       values: [election_id]
@@ -1768,9 +1897,9 @@ app.post('/api/results/generate', async (req, res) => {
         election_id,
         election_name,
         winner: winner.candidate_name,
+        winner_party: winner.party,
         total_votes: totalVotes,
         published: false,
-        status: 'Publish',
         date: result_date || now
       }
     });
@@ -1783,6 +1912,156 @@ app.post('/api/results/generate', async (req, res) => {
     });
   }
 });
+
+
+app.get('/api/results', async (req, res) => {
+  const { election_id, vidhansabha_id, loksabha_id } = req.query;
+
+  let queryStr = `
+    SELECT 
+      r.id,
+      r.election_id,
+      r.election_name,
+      r.winner,
+      r.winner_party,
+      r.total_votes,
+      r.published,
+      r.date,
+      r.vidhansabha_id,
+      r.loksabha_id,
+      r.winner_id,
+      vs.name AS vidhansabha_name,
+      ls.name AS loksabha_name
+    FROM results r
+    LEFT JOIN vidhansabha_constituencies vs ON r.vidhansabha_id = vs.id
+    LEFT JOIN loksabha_constituencies ls ON r.loksabha_id = ls.id
+    WHERE 1=1
+  `;
+
+  const values = [];
+
+  if (election_id) {
+    queryStr += ' AND r.election_id = ?';
+    values.push(election_id);
+  }
+
+  if (vidhansabha_id) {
+    queryStr += ' AND r.vidhansabha_id = ?';
+    values.push(vidhansabha_id);
+  }
+
+  if (loksabha_id) {
+    queryStr += ' AND r.loksabha_id = ?';
+    values.push(loksabha_id);
+  }
+
+  try {
+    const results = await query({ query: queryStr, values });
+
+    res.status(200).json({
+      success: true,
+      data: results
+    });
+  } catch (error) {
+    console.error('❌ Error fetching results:', error);
+    res.status(500).json({
+      error: 'Failed to fetch results',
+      details: error.message
+    });
+  }
+});
+
+app.patch('/api/results/:id/publish', async (req, res) => {
+  const { id } = req.params;
+  const { published } = req.body;
+
+  // Validate input
+  if (typeof published === 'undefined') {
+    return res.status(400).json({
+      success: false,
+      error: 'Published status is required'
+    });
+  }
+
+  try {
+    // Convert boolean to number (1/0)
+    const publishStatus = published ? 1 : 0;
+
+    // Update only the published field
+    const result = await query({
+      query: `UPDATE results SET published = ? WHERE id = ?`,
+      values: [publishStatus, id]
+    });
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Result not found'
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Result ${publishStatus ? 'published' : 'unpublished'} successfully`
+    });
+
+  } catch (error) {
+    console.error('Database error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Database operation failed',
+      details: error.message
+    });
+  }
+});
+
+app.delete('/api/results/:id', async (req, res) => {
+  const { id } = req.params;
+
+  if (!id) {
+    return res.status(400).json({ error: 'Result ID is required' });
+  }
+
+  try {
+    // 1. First get the result to find its associated election_id
+    const existingResult = await query({
+      query: `SELECT * FROM results WHERE id = ?`,
+      values: [id]
+    });
+
+    if (existingResult.length === 0) {
+      return res.status(404).json({ error: 'Result not found' });
+    }
+
+    const electionId = existingResult[0].election_id;
+
+    // 2. Delete the result
+    await query({
+      query: `DELETE FROM results WHERE id = ?`,
+      values: [id]
+    });
+
+    // 3. Update the election status
+    await query({
+      query: `UPDATE elections SET result = 'No' WHERE id = ?`,
+      values: [electionId]
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Result deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting result:', error);
+    res.status(500).json({
+      error: 'Failed to delete result',
+      details: error.message
+    });
+  }
+});
+
+
+
 
 
 
