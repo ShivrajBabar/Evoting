@@ -1148,6 +1148,61 @@ app.get('/api/voters/:id', async (req, res) => {
   }
 });
 
+app.get('/api/voters/users/:id', async (req, res) => {
+  const id = req.params.id;
+  console.log(`📥 GET /api/voters/${id}`); // fixed log message too
+
+  try {
+    const [voter] = await pool.query(`
+      SELECT 
+        u.id AS user_id,
+        u.name,
+        u.email,
+        u.phone,
+        u.dob,
+        u.status,
+        u.photo_name,
+
+        v.id AS voter_id,
+        v.voter_id AS voter_card_number,
+
+        v.state_id, v.district_id, v.loksabha_ward_id, v.vidhansabha_ward_id,
+        v.municipal_corp_id, v.municipal_corp_ward_id, v.booth_id,
+
+        s.name AS state_name,
+        d.name AS district_name,
+        ls.name AS loksabha_name,
+        vs.name AS vidhansabha_name,
+        mc.name AS municipal_corp_name,
+        mw.name AS ward_name,
+        b.name AS booth_name
+
+      FROM users u
+      JOIN voters v ON v.user_id = u.id
+
+      LEFT JOIN states s ON v.state_id = s.id
+      LEFT JOIN districts d ON v.district_id = d.id
+      LEFT JOIN loksabha_constituencies ls ON v.loksabha_ward_id = ls.id
+      LEFT JOIN vidhansabha_constituencies vs ON v.vidhansabha_ward_id = vs.id
+      LEFT JOIN local_bodies mc ON v.municipal_corp_id = mc.id
+      LEFT JOIN wards mw ON v.municipal_corp_ward_id = mw.id
+      LEFT JOIN booths b ON v.booth_id = b.id
+
+      WHERE v.user_id = ?
+      LIMIT 1
+    `, [id]);
+
+    if (!voter || voter.length === 0) {
+      return res.status(404).json({ error: 'Voter not found' });
+    }
+
+    res.json(voter[0]);
+  } catch (error) {
+    console.error("❌ Error fetching voter by id:", error);
+    res.status(500).json({ error: 'Failed to fetch voter', details: error.message });
+  }
+});
+
 
 
 
