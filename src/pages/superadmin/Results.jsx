@@ -48,6 +48,7 @@ const SuperadminResults = () => {
     }
   });
 
+
   // Fetch results
 
   const {
@@ -58,18 +59,13 @@ const SuperadminResults = () => {
     queryKey: ['admin-results', selectedElection],
     queryFn: async () => {
       try {
-        const filters = {};
+        const queryParams = new URLSearchParams();
+
         if (selectedElection !== 'all') {
           const electionId = parseInt(selectedElection);
           if (!isNaN(electionId)) {
-            filters.election_id = electionId;
+            queryParams.append('election_id', electionId);
           }
-        }
-
-        // Build query string based on filters
-        const queryParams = new URLSearchParams();
-        if (filters.election_id) {
-          queryParams.append('election_id', filters.election_id);
         }
 
         const response = await fetch(`http://localhost:3000/api/results?${queryParams.toString()}`);
@@ -79,7 +75,7 @@ const SuperadminResults = () => {
           throw new Error(data.error || "Failed to fetch results");
         }
 
-        // Transform the data to match your existing structure
+        // Transform the data - handle string "1"/"0" for published status
         return data.data.map(result => ({
           id: result.id,
           election_id: result.election_id,
@@ -87,7 +83,7 @@ const SuperadminResults = () => {
           winner_name: result.winner,
           winner_party: result.winner_party,
           total_votes: result.total_votes,
-          published: Boolean(result.published), // Convert to boolean
+          published: result.published === "1", // Handle string "1" or "0"
           published_date: result.date,
           vidhansabha_id: result.vidhansabha_id,
           loksabha_id: result.loksabha_id,
@@ -132,25 +128,45 @@ const SuperadminResults = () => {
     try {
       const newStatus = currentPublishStatus ? 0 : 1;
 
-      await axios.patch(`http://localhost:3001/api/results/${resultId}/publish`, {
+      const response = await axios.patch(`http://localhost:3000/api/results/${resultId}/publish`, {
         published: newStatus
       });
 
-      toast({
-        title: "Success",
-        description: newStatus === 1 ? "Result published" : "Result unpublished",
-        variant: "default"
-      });
+      if (response.data.success) {
+        toast({
+          title: "Success",
+          description: newStatus === 1 ? "Result published" : "Result unpublished",
+          variant: "default"
+        });
 
-      // ✅ Only this is needed
-      await refetchResults();
+        // Optimistically update the UI
+        queryClient.setQueryData(['admin-results', selectedElection], (oldData) => {
+          return oldData.map(result => {
+            if (result.id === resultId) {
+              return {
+                ...result,
+                published: newStatus === 1,
+                published_date: newStatus === 1 ? new Date().toISOString() : result.published_date
+              };
+            }
+            return result;
+          });
+        });
+
+        // Force a refetch to ensure consistency
+        await queryClient.invalidateQueries(['admin-results', selectedElection]);
+      } else {
+        throw new Error(response.data.error || "Failed to update status");
+      }
     } catch (error) {
       console.error('❌ Error toggling publish status:', error);
       toast({
         title: "Error",
-        description: "Failed to update result status",
+        description: error.message || "Failed to update result status",
         variant: "destructive"
       });
+      // Revert by forcing a refetch
+      await queryClient.invalidateQueries(['admin-results', selectedElection]);
     }
   };
 
@@ -259,7 +275,7 @@ const SuperadminResults = () => {
         winner_id: winner?.candidate_id || null,
         winner_name: winner?.candidate_name || null,
         winner_party: winner?.party || null,
-        published: false, // Default to unpublished
+        published: 0, // Default to unpublished
         candidates: candidates,
         status: 'completed' // Add status field if required by your backend
       };

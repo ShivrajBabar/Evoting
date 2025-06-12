@@ -63,7 +63,7 @@ const Login = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-12">
-      <div className="max-w-md w-full space-y-8">
+      <div className="max-w-sm w-full space-y-8">
         <div className="text-center">
           <h1 className="text-3xl font-bold">Ballet Secure</h1>
           <p className="mt-2 text-gray-600">Secure, transparent, and reliable voting</p>
