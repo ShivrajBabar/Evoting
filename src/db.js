@@ -20,19 +20,13 @@ dotenv.config();
 
 export async function getDBConnection() {
   try {
+    
     const connection = await mysql.createConnection({
-      host: "193.203.184.92",
-      user: "u906396894_evotingShivraj",
-      password: "Rajendrababar@123",
-      database: "u906396894_evotingShivraj",
+      host: process.env.DB_HOST || "localhost",
+      user: process.env.DB_USER || "",
+      password: process.env.DB_PASSWORD || "root@123",
+      database: process.env.DB_NAME || "ballet_evoting_schema",
     });
-
-    // const connection = await mysql.createConnection({
-    //   host: process.env.DB_HOST || "localhost",
-    //   user: process.env.DB_USER || "",
-    //   password: process.env.DB_PASSWORD || "root@123",
-    //   database: process.env.DB_NAME || "ballet_evoting_schema",
-    // });
 
     console.log("✅ Database Connected Successfully");
     return connection;

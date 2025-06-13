@@ -12,25 +12,17 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Create pool for MySQL
-// const pool = mysql.createPool({
-//   host: 'localhost',
-//   user: 'root',
-//   password: '',
-//   database: 'ballet_evoting_schema',
-//   waitForConnections: true,
-//   connectionLimit: 10,
-//   queueLimit: 0
-// });
-
 const pool = mysql.createPool({
-  host: '193.203.184.92',
-  user: 'u906396894_evotingShivraj',
-  password: 'Rajendrababar@123',
-  database: 'u906396894_evotingShivraj',
+  host: 'localhost',
+  user: 'root',
+  password: '',
+  database: 'ballet_evoting_schema',
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0
 });
+
+
 
 const photoDir = 'uploads/photos';
 if (!fs.existsSync(photoDir)) {
